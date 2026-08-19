@@ -1,0 +1,13 @@
+{
+  "name": "pair-sum",
+  "version": "1.0.0",
+  "description": "Pair Sum — connect equal numbers or pairs that make ten along clear paths. A notebook-world number logic puzzle.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<title>Pair Sum</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>✍️</text></svg>">
+</head>
+<body data-theme="notebook">
+<a class="skip-link" href="#board-mirror">Skip to board</a>
+
+<!-- Live regions: objective, turn, score, errors, results -->
+<div id="live-polite" class="visually-hidden" aria-live="polite"></div>
+<div id="live-alert" class="visually-hidden" aria-live="assertive"></div>
+<div id="caption-line" class="caption-line" aria-hidden="true"></div>
+
+<header id="topbar" class="topbar">
+  <div class="brand" aria-hidden="true">✍️ Pair&nbsp;Sum</div>
+  <div id="topbar-status" class="topbar-status" role="status"></div>
+  <div class="topbar-actions">
+    <button id="btn-help" class="chip" type="button">Help</button>
+    <button id="btn-settings" class="chip" type="button">Settings</button>
+    <button id="btn-profile" class="chip chip-profile" type="button" aria-label="Profile">Guest</button>
+  </div>
+</header>
+
+<div id="layout" class="layout">
+
+  <aside id="rail-left" class="rail rail-left" aria-label="Objective and progress">
+    <h2 class="rail-title">Objective</h2>
+    <p id="objective-text">Clear the page by connecting matching pairs.</p>
+    <dl class="stat-list">
+      <div><dt>Score</dt><dd id="stat-score">0</dd></div>
+      <div><dt>Chain</dt><dd id="stat-chain">0</dd></div>
+      <div><dt>Digits left</dt><dd id="stat-remaining">0</dd></div>
+      <div id="stat-moves-wrap"><dt>Moves left</dt><dd id="stat-moves">—</dd></div>
+      <div id="stat-time-wrap"><dt>Time left</dt><dd id="stat-time">—</dd></div>
+    </dl>
+    <div id="journey-progress-mini" class="mini-progress"></div>
+  </aside>
+
+  <main id="stage" class="stage">
+    <div id="canvas-host" class="canvas-host" aria-hidden="true"></div>
+
+    <!-- DOM mirror of the board: the semantic/accessible interface layer.
+         Fully playable; visually hidden while the 3D view is healthy. -->
+    <div id="board-mirror" class="board-mirror" role="grid"
+         aria-label="Pair Sum board. Arrow keys move, Enter selects."></div>
+
+    <div id="lesson-banner" class="lesson-banner" hidden>
+      <div id="lesson-text"></div>
+      <div class="lesson-actions">
+        <button id="btn-lesson-skip" type="button" class="chip">Skip lesson</button>
+      </div>
+    </div>
+
+    <div id="hud" class="hud" hidden>
+      <div id="hud-objective" class="hud-objective"></div>
+      <div id="hud-alert" class="hud-alert" role="alert" hidden></div>
+    </div>
+
+    <nav id="action-tray" class="action-tray" aria-label="Round actions" hidden>
+      <button id="btn-hint" type="button" class="tray-btn" title="Hint (H)">💡<span>Hint</span></button>
+      <button id="btn-undo" type="button" class="tray-btn" title="Undo (U)">↩️<span>Undo</span></button>
+      <button id="btn-addrows" type="button" class="tray-btn tray-primary" title="Add rows (A)">➕<span>Add rows</span></button>
+      <button id="btn-pause" type="button" class="tray-btn" title="Pause (Esc)">⏸️<span>Pause</span></button>
+    </nav>
+
+    <div id="webgl-fallback" class="webgl-fallback" hidden>
+      <p><strong>3D view unavailable.</strong> Your browser blocked WebGL, so you are playing
+      the fully supported notebook view. Account and session state are preserved.</p>
+    </div>
+
+    <!-- Countdown overlay -->
+    <div id="countdown" class="countdown" hidden aria-hidden="true">3</div>
+  </main>
+
+  <aside id="rail-right" class="rail rail-right" aria-label="Status and contextual actions">
+    <h2 class="rail-title">Status</h2>
+    <div id="rail-context" class="rail-context"></div>
+    <div id="presence-note" class="presence-note"></div>
+  </aside>
+</div>
+
+<!-- Screens -->
+<div id="screens" class="screens">
+
+  <section id="screen-title" class="screen screen-title" aria-labelledby="title-h">
+    <h1 id="title-h">Pair Sum</h1>
+    <p class="tagline">Connect equal numbers — or pairs that make ten — along open paths.</p>
+    <div class="title-actions">
+      <button id="btn-play" class="big-btn" type="button">Play</button>
+      <button id="btn-continue" class="big-btn secondary" type="button" hidden>Continue round</button>
+    </div>
+    <div class="title-secondary">
+      <button id="btn-daily" type="button" class="link-btn">📅 Daily challenge <span id="daily-status"></span></button>
+      <button id="btn-journey" type="button" class="link-btn">🗺️ Journey <span id="journey-status"></span></button>
+      <button id="btn-boards" type="button" class="link-btn">🏆 Scores</button>
+      <button id="btn-achievements" type="button" class="link-btn">🎖️ Achievements</button>
+    </div>
+  </section>
+
+  <section id="screen-modes" class="screen" aria-labelledby="modes-h" hidden>
+    <h1 id="modes-h">Choose a mode</h1>
+    <div id="mode-list" class="card-grid"></div>
+    <button class="link-btn back-btn" data-back type="button">← Back</button>
+  </section>
+
+  <section id="screen-journey" class="screen" aria-labelledby="journey-h" hidden>
+    <h1 id="journey-h">Journey</h1>
+    <p class="screen-sub">Forty pages across five notebooks. Mastery stages every eighth page.</p>
+    <div id="journey-map" class="journey-map"></div>
+    <button class="link-btn back-btn" data-back type="button">← Back</button>
+  </section>
+
+  <section id="screen-setup" class="screen" aria-labelledby="setup-h" hidden>
+    <h1 id="setup-h">Set up</h1>
+    <div id="setup-body" class="setup-body"></div>
+    <div class="setup-actions">
+      <button id="btn-setup-start" class="big-btn" type="button">Start</button>
+      <button class="link-btn back-btn" data-back type="button">← Back</button>
+    </div>
+  </section>
+
+  <section id="screen-results" class="screen" aria-labelledby="results-h" hidden>
+    <h1 id="results-h">Results</h1>
+    <div id="results-body"></div>
+    <div class="setup-actions">
+      <button id="btn-retry" class="big-btn" type="button">Retry</button>
+      <button id="btn-next" class="big-btn secondary" type="button">Next</button>
+      <button id="btn-results-home" class="link-btn" type="button">Title</button>
+    </div>
+  </section>
+
+  <section id="screen-help" class="screen" aria-labelledby="help-h" hidden>
+    <h1 id="help-h">How to play</h1>
+    <div id="help-body" class="help-body"></div>
+    <button class="link-btn back-btn" data-back type="button">← Back</button>
+  </section>
+
+  <section id="screen-settings" class="screen" aria-labelledby="settings-h" hidden>
+    <h1 id="settings-h">Settings</h1>
+    <div id="settings-body" class="settings-body"></div>
+    <button class="link-btn back-btn" data-back type="button">← Back</button>
+  </section>
+
+  <section id="screen-achievements" class="screen" aria-labelledby="ach-h" hidden>
+    <h1 id="ach-h">Achievements</h1>
+    <div id="ach-body" class="card-grid"></div>
+    <button class="link-btn back-btn" data-back type="button">← Back</button>
+  </section>
+
+  <section id="screen-boards" class="screen" aria-labelledby="boards-h" hidden>
+    <h1 id="boards-h">Scores</h1>
+    <div id="boards-body"></div>
+    <button class="link-btn back-btn" data-back type="button">← Back</button>
+  </section>
+
+  <section id="screen-profile" class="screen" aria-labelledby="profile-h" hidden>
+    <h1 id="profile-h">Profile</h1>
+    <div id="profile-body" class="settings-body"></div>
+    <button class="link-btn back-btn" data-back type="button">← Back</button>
+  </section>
+</div>
+
+<!-- Pause overlay -->
+<div id="pause-overlay" class="pause-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="pause-h">
+  <div class="pause-card">
+    <h1 id="pause-h">Paused</h1>
+    <p id="pause-summary" class="pause-summary"></p>
+    <div class="pause-actions">
+      <button id="btn-resume" class="big-btn" type="button">Resume</button>
+      <button id="btn-pause-settings" class="link-btn" type="button">Settings</button>
+      <button id="btn-pause-help" class="link-btn" type="button">Help</button>
+      <button id="btn-restart-round" class="link-btn" type="button">Restart round</button>
+      <button id="btn-leave-round" class="link-btn danger" type="button">Leave round</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-stack" class="toast-stack" aria-hidden="true"></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
