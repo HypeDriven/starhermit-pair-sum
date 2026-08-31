@@ -6,6 +6,24 @@
 
 import { createStream } from './rules.js';
 
+// Authored sample one-shots (sfx/<name>.opus, see sfx/manifest.json), mapped
+// onto the existing logical events. Each event prefers its sample and falls
+// back to the synthesized path while the clip is still loading or missing.
+const SFX = {
+  select: 'tile-select',
+  deselect: 'tile-deselect',
+  clear: 'pair-clear',
+  clearChain: 'chain-clear',
+  collapse: 'row-collapse',
+  addRows: 'rows-added',
+  invalid: 'invalid-pair',
+  win: 'round-win',
+  lose: 'round-lose',
+  hint: 'hint-reveal',
+  undo: 'undo-move',
+  uiClick: 'ui-click',
+};
+
 export class AudioEngine {
   constructor(settings, emitCaption = () => {}) {
     this.settings = settings;       // live settings object (volumes 0..1, muted)
@@ -15,6 +33,7 @@ export class AudioEngine {
     this.musicTimer = null;
     this.ambienceSrc = null;
     this.stream = createStream('audio-variants');
+    this.sfxCache = new Map();      // name -> { buffer, promise, failed }
     this.started = false;
   }
 
@@ -54,6 +73,37 @@ export class AudioEngine {
 
   caption(text) {
     if (this.settings.captions) this.emitCaption(text);
+  }
+
+  // --- authored sample one-shots (lazy fetch/decode after gesture unlock) ----
+
+  loadSample(name) {
+    // Starts a lazy fetch/decode on first use; returns the AudioBuffer only
+    // once decoded, otherwise null (caller falls back to synthesis).
+    if (!this.ctx) return null;
+    let rec = this.sfxCache.get(name);
+    if (!rec) {
+      rec = { buffer: null, promise: null, failed: false };
+      this.sfxCache.set(name, rec);
+    }
+    if (rec.buffer) return rec.buffer;
+    if (rec.failed || rec.promise) return null;
+    rec.promise = fetch(`sfx/${name}.opus`)
+      .then((r) => { if (!r.ok) throw new Error(`sfx ${name}: ${r.status}`); return r.arrayBuffer(); })
+      .then((ab) => this.ctx.decodeAudioData(ab))
+      .then((buffer) => { rec.buffer = buffer; })
+      .catch(() => { rec.failed = true; });
+    return null;
+  }
+
+  playSample(name) {
+    const buffer = this.loadSample(name);
+    if (!buffer) return false;
+    const src = this.ctx.createBufferSource();
+    src.buffer = buffer;
+    src.connect(this.buses.effects);
+    src.start();
+    return true;
   }
 
   // --- synth primitives -------------------------------------------------------
@@ -101,45 +151,55 @@ export class AudioEngine {
     const v = 0.94 + this.stream.next() * 0.12; // seeded pitch variant
     switch (e.type) {
       case 'select':
+        if (this.playSample(SFX.select)) break;
         this.blip('effects', { freq: 520 * v, dur: 0.05, type: 'sine', gain: 0.12 });
         break;
       case 'deselect':
+        if (this.playSample(SFX.deselect)) break;
         this.blip('effects', { freq: 380 * v, dur: 0.05, type: 'sine', gain: 0.1 });
         break;
       case 'clear': {
+        this.caption(`Pair cleared${e.chain > 1 ? `, chain ${e.chain}` : ''}`);
+        if (this.playSample((e.chain || 1) > 1 ? SFX.clearChain : SFX.clear)) break;
         const base = 440 * Math.pow(1.0595, Math.min(12, (e.chain || 1) - 1));
         this.thud('effects', { freq: 150 * v, gain: 0.22 });
         this.blip('effects', { freq: base * v, dur: 0.14, type: 'sine', gain: 0.22 });
         this.blip('effects', { freq: base * 1.5 * v, dur: 0.18, type: 'sine', gain: 0.16, delay: 0.05 });
-        this.caption(`Pair cleared${e.chain > 1 ? `, chain ${e.chain}` : ''}`);
         break;
       }
       case 'collapse':
-        this.blip('effects', { freq: 300 * v, dur: 0.25, type: 'sine', gain: 0.2, slide: 500 });
         this.caption('Row cleared');
+        if (this.playSample(SFX.collapse)) break;
+        this.blip('effects', { freq: 300 * v, dur: 0.25, type: 'sine', gain: 0.2, slide: 500 });
         break;
       case 'addRows':
-        this.blip('effects', { freq: 240 * v, dur: 0.3, type: 'triangle', gain: 0.2, slide: 260 });
         this.caption('Rows added');
+        if (this.playSample(SFX.addRows)) break;
+        this.blip('effects', { freq: 240 * v, dur: 0.3, type: 'triangle', gain: 0.2, slide: 260 });
         break;
       case 'invalid':
-        this.blip('effects', { freq: 160, dur: 0.15, type: 'square', gain: 0.08, slide: -40 });
         this.caption('That pair is not legal');
+        if (this.playSample(SFX.invalid)) break;
+        this.blip('effects', { freq: 160, dur: 0.15, type: 'square', gain: 0.08, slide: -40 });
         break;
       case 'win':
+        this.caption('Board clear!');
+        if (this.playSample(SFX.win)) break;
         [523, 659, 784, 1047].forEach((f, i) =>
           this.blip('effects', { freq: f, dur: 0.3, type: 'sine', gain: 0.2, delay: i * 0.11 }));
-        this.caption('Board clear!');
         break;
       case 'lose':
+        this.caption('Round over');
+        if (this.playSample(SFX.lose)) break;
         [392, 330, 262].forEach((f, i) =>
           this.blip('effects', { freq: f, dur: 0.3, type: 'sine', gain: 0.18, delay: i * 0.14 }));
-        this.caption('Round over');
         break;
       case 'hint':
+        if (this.playSample(SFX.hint)) break;
         this.blip('effects', { freq: 880, dur: 0.1, type: 'sine', gain: 0.12 });
         break;
       case 'undo':
+        if (this.playSample(SFX.undo)) break;
         this.blip('effects', { freq: 340, dur: 0.09, type: 'triangle', gain: 0.14, slide: -80 });
         break;
       default:
@@ -149,6 +209,7 @@ export class AudioEngine {
 
   uiClick() {
     if (!this.ctx) return;
+    if (this.playSample(SFX.uiClick)) return;
     this.blip('effects', { freq: 660, dur: 0.04, type: 'sine', gain: 0.08 });
   }
 

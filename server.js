@@ -26,6 +26,7 @@ const MIME = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
+  '.opus': 'audio/ogg',
 };
 
 // --- tiny durable stores -----------------------------------------------------
