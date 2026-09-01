@@ -31,6 +31,7 @@ html, body {
   background: var(--paper); color: var(--ink);
   overscroll-behavior: none;
 }
+body { display: flex; flex-direction: column; overflow: hidden; }
 
 .visually-hidden {
   position: absolute; width: 1px; height: 1px; overflow: hidden;
@@ -68,7 +69,8 @@ button { font-family: inherit; cursor: pointer; }
 .layout {
   display: grid;
   grid-template-columns: minmax(180px, 240px) 1fr minmax(180px, 240px);
-  height: calc(100dvh - 48px - var(--sat));
+  flex: 1;
+  min-height: 0;
 }
 .rail {
   padding: 16px 14px; overflow-y: auto; background: var(--panel);
