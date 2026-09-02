@@ -211,7 +211,14 @@ body.left-handed .action-tray { flex-direction: row-reverse; }
   font-size: 1rem; padding: 8px 12px; min-height: 44px;
 }
 .link-btn.danger { color: #c0392b; }
-.back-btn { margin-top: 22px; }
+/* Back buttons and the setup action row stick to the bottom of the scrolling
+   screen, so they stay reachable even when the content above is taller than
+   the viewport (e.g. the Learn lesson list on small phones). */
+.back-btn {
+  margin-top: 22px;
+  position: sticky; bottom: calc(8px + var(--sab)); z-index: 2;
+  background: var(--paper); border-radius: 8px;
+}
 
 .card-grid {
   display: grid; gap: 12px; width: min(720px, 94vw);
@@ -250,7 +257,11 @@ body.left-handed .action-tray { flex-direction: row-reverse; }
 .setup-body .kv { display: flex; justify-content: space-between; gap: 18px; border-bottom: 1px dashed var(--rule); padding: 6px 0; }
 .setup-body .kv span { flex-shrink: 0; }
 .setup-body .kv strong { text-align: right; font-weight: 600; }
-.setup-actions { display: flex; gap: 14px; align-items: center; margin-top: 22px; flex-wrap: wrap; justify-content: center; }
+.setup-actions {
+  display: flex; gap: 14px; align-items: center; margin-top: 22px; flex-wrap: wrap; justify-content: center;
+  position: sticky; bottom: calc(8px + var(--sab)); z-index: 2;
+  background: var(--paper); border-radius: 12px; padding: 4px 8px;
+}
 
 .diff-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .diff-btn { border: 2px solid var(--rule); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 10px 16px; min-height: 44px; }
