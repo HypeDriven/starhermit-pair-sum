@@ -5,6 +5,7 @@
 // No secrets, no external services.
 
 import http from 'node:http';
+import { createHash } from 'node:crypto';
 import { readFile, writeFile, mkdir, appendFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
@@ -61,6 +62,15 @@ function json(res, status, body, headers = {}) {
   res.end(JSON.stringify(body));
 }
 
+// Derive a stable opaque identity from the host-issued bearer token rather
+// than trusting any client-declared (namespaced) key. Anonymous guests that
+// carry no token all share the 'guest' key, which is inherent to offline play.
+function profileId(req) {
+  const auth = req.headers.authorization || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : 'guest';
+  return createHash('sha256').update(token || 'guest').digest('hex').slice(0, 16);
+}
+
 async function readBody(req) {
   let raw = '';
   for await (const chunk of req) {
@@ -78,7 +88,7 @@ function validateSubmission(body) {
   const { result, envelope } = body || {};
   if (!result || !envelope) return { ok: false, error: 'missing-fields' };
   if (envelope.rulesV !== undefined && envelope.rulesV !== RULES_VERSION) {
-    // (older clients may omit rulesV; build field carries it)
+    return { ok: false, error: 'stale-version' };
   }
   if (envelope.build !== RULES_VERSION) return { ok: false, error: 'stale-version' };
   if (envelope.contentV !== CONTENT_VERSION) return { ok: false, error: 'stale-content' };
@@ -103,7 +113,7 @@ function validateSubmission(body) {
       if (local && local.hash !== cp.hash) return { ok: false, error: 'checkpoint-mismatch' };
     }
   }
-  return { ok: true, finalHash: r.finalHash };
+  return { ok: true, final: r.final, finalHash: r.finalHash };
 }
 
 // --- routes ----------------------------------------------------------------------
@@ -126,9 +136,18 @@ async function handleApi(req, res, url) {
   if (path === '/leaderboard' && req.method === 'GET') {
     const board = url.searchParams.get('board') || 'daily';
     const boards = await loadJson('leaderboards.json', {});
+    // Rank by completion, then lower score-bonus order matches the client's
+    // compareResults (spec.md:38): completion, fewer invalid actions, lower
+    // elapsed time, then stable session id.
+    const rank = (r) => (r.status === 'won' ? 0 : r.status === 'lost' ? 1 : 2);
     const entries = (boards[board] || [])
       .slice()
-      .sort((a, b) => b.score - a.score || a.elapsedMs - b.elapsedMs)
+      .sort((a, b) =>
+        rank(a) - rank(b) ||
+        b.score - a.score ||
+        a.invalid - b.invalid ||
+        a.elapsedMs - b.elapsedMs ||
+        String(a.sessionId).localeCompare(String(b.sessionId)))
       .slice(0, 100)
       .map((e) => ({
         name: e.name, score: e.score, moves: e.moves, invalid: e.invalid,
@@ -148,10 +167,11 @@ async function handleApi(req, res, url) {
     boards[board] = boards[board] || [];
     const id = String(result.sessionId || '');
     if (!boards[board].some((e) => e.sessionId === id)) { // idempotent by command/session id
+      const f = check.final; // authoritative replayed end state
       boards[board].push({
         sessionId: id, name: String(body.name || 'Player').slice(0, 24),
-        score: result.score.total, moves: result.moves, invalid: result.invalid,
-        elapsedMs: result.elapsedMs, status: result.status,
+        score: f.score.total, moves: f.moves, invalid: f.invalid,
+        elapsedMs: f.elapsedMs, status: f.status,
         seed: result.seed, rulesV: result.rulesV, contentV: result.contentV,
         finalHash: check.finalHash, at: Date.now(),
       });
@@ -163,7 +183,7 @@ async function handleApi(req, res, url) {
   if (path === '/save' && req.method === 'POST') {
     const body = await readBody(req);
     const saves = await loadJson('saves.json', {});
-    const key = String(body.player || 'guest').slice(0, 64);
+    const key = profileId(req);
     // Conflict handling: keep both revisions; strict-descendant wins.
     const prev = saves[key];
     const next = { doc: body.doc, rev: body.doc?.rev || 0, at: Date.now() };
@@ -178,7 +198,7 @@ async function handleApi(req, res, url) {
 
   if (path === '/save' && req.method === 'GET') {
     const saves = await loadJson('saves.json', {});
-    const key = String(url.searchParams.get('player') || 'guest').slice(0, 64);
+    const key = profileId(req);
     return json(res, 200, { doc: saves[key]?.doc || null });
   }
 

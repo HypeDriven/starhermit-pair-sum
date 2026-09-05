@@ -10,7 +10,7 @@ against `server.js`.
 | --- | --- |
 | `npm test` | 39/39 pass |
 | `node --check` on all modules | clean (8 modules + `server.js`) |
-| `tests/e2e.mjs` (headless Chrome) | not present — replaced by an ad-hoc CDP boot/mode/crawl sweep (see below) |
+| `npm run test:e2e` (`tests/e2e.mjs`, headless Chrome) | PASS — desktop + mobile, no page errors (see below) |
 
 Ad-hoc headless-Chrome coverage: boot (0 console errors), all six mode cards opened, a Daily
 round played through hint/undo/add-rows/pause/resume/resize, a **Daily board cleared to a win**
@@ -19,9 +19,12 @@ breakdown, achievements and a validated leaderboard submission — 0 console err
 round taken to results, a 70-click random UI crawl (0 errors), and a corrupt-`localStorage` reload
 matrix (`{"broken":`, `null`, `[]`, `{}`, non-JSON — all booted cleanly).
 
-## Confirmed defects
+## Resolved defects (fixed 2026-09-04)
 
-Defects below were each verified by reading the source, not just reported by the model.
+All five confirmed defects below were re-verified against the current source,
+fixed surgically, and confirmed resolved with a live `server.js` probe and a
+headless-Chrome Practice-mode check (see each item). `npm test` (39/39) and
+`npm run test:e2e` (PASS) both confirm no regressions.
 
 ### 1. Practice mode is dead — `PRACTICE_DIFFICULTIES` is used but never imported
 
@@ -44,6 +47,11 @@ Defects below were each verified by reading the source, not just reported by the
       at openMode (http://localhost:39501/js/main.js:355:51)
       at HTMLButtonElement.onclick (http://localhost:39501/js/ui.js:238:24)
   ```
+
+- **RESOLVED 2026-09-04:** Added `PRACTICE_DIFFICULTIES` to the import block in
+  `js/main.js` (now `js/main.js:12`). Verified: headless Chrome opens Title → Play → Practice
+  and the setup screen renders with the Calm/Steady/Brisk/Steep difficulty picker and zero
+  page errors.
 
 ### 2. Leaderboard stores client-declared `moves` / `invalid` / `elapsedMs` — the tie-break is spoofable
 
@@ -72,6 +80,12 @@ Defects below were each verified by reading the source, not just reported by the
   `moves: 99999` and `invalid: -50` were accepted and published although the replay says 0/0.
   Note the same request also put a still-`active` (unfinished) session on the ranked daily board.
 
+- **RESOLVED 2026-09-04:** `validateSubmission` now returns `final: r.final`
+  (`server.js:116`); the submit handler writes `score`, `moves`, `invalid`, `elapsedMs` and
+  `status` from `check.final` instead of `result` (`server.js:151-159`). Verified live: a
+  replay submission claiming `moves:99999 invalid:-50 elapsedMs:0` now stores
+  `[0, 0, 0, 'aborted']`.
+
 ### 3. Server leaderboard ordering ignores completion and invalid count
 
 - **File:** `server.js:130` (`handleApi`, `/leaderboard` GET)
@@ -93,6 +107,11 @@ Defects below were each verified by reading the source, not just reported by the
 
   The `status` field is stored but never influences ranking.
 
+- **RESOLVED 2026-09-04:** The `/leaderboard` GET sort now mirrors `compareResults`
+  (`server.js:127-136`): rank by completion (`won`0 `lost`1 else2), then score desc, then
+  `invalid` asc, then `elapsedMs` asc, then session id. The client's `compareResults` unit test
+  (`tiebreak ordering`, in `tests/rules.test.mjs`) still passes, confirming the shared contract.
+
 ### 4. Dead version guard in `validateSubmission`
 
 - **File:** `server.js:79-81`
@@ -109,6 +128,10 @@ Defects below were each verified by reading the source, not just reported by the
   `envelope.build` is checked on the next line.
 - **Expected:** Either reject the mismatch or drop the check.
 - **Evidence:** The quoted lines.
+
+- **RESOLVED 2026-09-04:** The guard now rejects a mismatch with `stale-version`
+  (`server.js:90-92`). Verified live: a submission with `rulesV: RULES_VERSION + 999` returns
+  HTTP 422 `{"error":"stale-version"}`.
 
 ### 5. Cloud saves are readable and writable by anyone who names the key
 
@@ -138,6 +161,14 @@ Defects below were each verified by reading the source, not just reported by the
   {"doc":{"v":1,"journey":{},"achievements":{"first_clear":{"at":1787250792797},
    "mechanic_master":{...}},"totals":{"pairs":16,"clears":1},"streakDays":["2026-08-20"],...
   ```
+
+- **RESOLVED 2026-09-04:** Added `profileId(req)` (`server.js:69-75`) mirroring the
+  `pixel-atelier` helper: it derives an opaque sha-256 key from the `Authorization: Bearer`
+  token (falling back to `guest`), and the `/save` POST/GET handlers now use it instead of
+  trusting a client-named `player`/`body.player` key (`server.js:174`, `server.js:190`). A client
+  can no longer address (read/overwrite) a specific player's key by name. Verified live: a save
+  POST naming `player:"victim"` no longer creates a separate `victim` key — it lands under the
+  guest identity, and the `player=victim` query name is ignored.
 
 ## Suspected — not confirmed
 

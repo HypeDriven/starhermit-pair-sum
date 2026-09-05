@@ -8,6 +8,7 @@ import { UI } from './ui.js';
 import { AudioEngine } from './audio.js';
 import {
   LESSONS, JOURNEY, CHALLENGES, dailyForDate, practiceDef, makeDef, generateBoard, THEMES,
+  PRACTICE_DIFFICULTIES,
 } from './content.js';
 import { listLegalPairs, remainingCount } from './rules.js';
 
