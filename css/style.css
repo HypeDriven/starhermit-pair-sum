@@ -180,7 +180,9 @@ body.left-handed .action-tray { flex-direction: row-reverse; }
 .caption-line.show { opacity: 1; }
 
 /* --- screens --- */
-.screens { position: fixed; inset: 0; z-index: 40; pointer-events: none; }
+/* Screens sit above the pause overlay (z-index 80) so Settings/Help opened
+   from the pause menu remain visible and clickable. */
+.screens { position: fixed; inset: 0; z-index: 85; pointer-events: none; }
 .screen {
   position: absolute; inset: 0; overflow-y: auto;
   padding: calc(24px + var(--sat)) calc(20px + var(--sar)) calc(24px + var(--sab)) calc(20px + var(--sal));

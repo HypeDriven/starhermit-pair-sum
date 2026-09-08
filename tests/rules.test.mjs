@@ -228,6 +228,14 @@ test('canAddRows false when board empty', () => {
   assert.equal(getHint(r.state), null);
 });
 
+test('checkPair success echoes the cell indices (hover preview contract)', () => {
+  const s = createGame(defWith([4, 4, 7, 0, 0, 3]));
+  const c = checkPair(s, 1, 0);
+  assert.equal(c.ok, true);
+  assert.equal(c.a, 1);
+  assert.equal(c.b, 0);
+});
+
 test('pathBetween reports intermediate cells for visualization', () => {
   const s = createGame(defWith([4, 0, 0, 4], 4));
   const p = pathBetween(s, 0, 3);

@@ -467,7 +467,7 @@ export class UI {
     const body = $('boards-body');
     body.innerHTML = '';
     const tabs = h('div', { class: 'board-tabs', role: 'tablist' });
-    for (const [key, label] of [['daily', 'Daily'], ['journey', 'Journey'], ['challenge', 'Challenge'], ['practice', 'Practice']]) {
+    for (const [key, label] of [['daily', 'Daily'], ['score', 'Score chase'], ['challenge', 'Challenge'], ['journey', 'Journey'], ['practice', 'Practice']]) {
       tabs.append(h('button', {
         class: 'diff-btn', type: 'button', role: 'tab',
         'aria-selected': key === boardKey ? 'true' : 'false',

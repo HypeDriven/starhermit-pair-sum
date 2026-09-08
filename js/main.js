@@ -30,6 +30,8 @@ let gamepadState = {};
 async function boot() {
   platform = await new Platform().init();
   platform.verifyProgress();
+  // Pull cloud progression when hosted (conflict-safe merge, both kept).
+  if (platform.hosted) await platform.reconcileProgress().catch(() => {});
   wireAchievements();
   ui = new UI(platform);
   audio = new AudioEngine(platform.settings, (t) => ui.caption(t));
@@ -143,7 +145,7 @@ function onSessionEvent(e) {
     case 'hint':
       if (e.none) {
         ui.showAlert(e.canAddRows ? 'No pairs connect — try Add Rows.' : 'No moves left.');
-        ui.announce('No legal pairs. Use Add Rows.', true);
+        ui.announce(e.canAddRows ? 'No legal pairs. Use Add Rows.' : 'No moves left.', true);
       } else {
         audio.onGameEvent({ type: 'hint' });
         ui.announce(`Hint: connect the ${hintText(e)}.`);
@@ -238,9 +240,9 @@ function wireUI() {
   $('btn-journey').onclick = () => { audio.uiClick(); openMode('journey'); };
   $('btn-boards').onclick = () => { audio.uiClick(); ui.renderBoards(); ui.showScreen('boards'); };
   $('btn-achievements').onclick = () => { audio.uiClick(); ui.renderAchievements(platform.progress); ui.showScreen('achievements'); };
-  $('btn-help').onclick = () => { audio.uiClick(); ui.renderHelp(platform.settings.bindings); ui.showScreen('help'); };
-  $('btn-settings').onclick = () => { audio.uiClick(); openSettings(); };
-  $('btn-profile').onclick = () => { audio.uiClick(); ui.renderProfile(); ui.showScreen('profile'); };
+  $('btn-help').onclick = () => { audio.uiClick(); pauseForScreen(); ui.renderHelp(platform.settings.bindings); ui.showScreen('help'); };
+  $('btn-settings').onclick = () => { audio.uiClick(); pauseForScreen(); openSettings(); };
+  $('btn-profile').onclick = () => { audio.uiClick(); pauseForScreen(); ui.renderProfile(); ui.showScreen('profile'); };
 
   for (const btn of document.querySelectorAll('[data-back]')) {
     btn.onclick = () => { audio.uiClick(); back(); };
@@ -534,7 +536,7 @@ function nextAfterResults() {
     return;
   }
   if (currentDef?.mode === 'daily' || currentDef?.mode === 'score') {
-    ui.renderBoards(currentDef.mode === 'daily' ? 'daily' : 'challenge');
+    ui.renderBoards(currentDef.mode === 'daily' ? 'daily' : 'score');
     ui.showScreen('boards');
     return;
   }
@@ -552,6 +554,16 @@ function wireAchievements() {
 // ---------------------------------------------------------------------------
 // Settings
 // ---------------------------------------------------------------------------
+
+// Opening a full-page screen mid-round pauses the round first: the clock
+// stops while the board is covered, and Back returns to the pause overlay
+// instead of silently abandoning the round on the title screen.
+function pauseForScreen() {
+  if (session?.state?.status === 'active' &&
+    (session.machine === 'active' || session.machine === 'tutorial')) {
+    session.pause('screen');
+  }
+}
 
 function openSettings() {
   ui.renderSettings(platform.settings, onSettingChange);
@@ -679,7 +691,9 @@ function wireInput() {
     const onPlayScreen = ui.currentScreen === null;
 
     if (e.key === 'Escape') {
-      if (ui.currentScreen === 'settings' || ui.currentScreen === 'help') { back(); return; }
+      // Escape acts as Back on any open screen; from a screen opened over a
+      // paused round this returns to the pause overlay.
+      if (ui.currentScreen) { back(); e.preventDefault(); return; }
       if (session.machine === 'paused') { ui.hidePause(); session.resume(); return; }
       if (inRound) {
         if (session.selection != null) {

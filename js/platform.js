@@ -121,9 +121,13 @@ export class Platform {
   // --- hosted API -------------------------------------------------------------------
 
   async api(path, opts = {}) {
+    const headers = { 'content-type': 'application/json', ...(opts.headers || {}) };
+    // The host-issued launch token authenticates saves/presence; it lives only
+    // in memory and is never persisted (spec: never store tokens).
+    if (this.launchToken) headers.authorization = `Bearer ${this.launchToken}`;
     const res = await fetch(`/api/v1${path}`, {
-      headers: { 'content-type': 'application/json' },
       ...opts,
+      headers,
       body: opts.body ? JSON.stringify(opts.body) : undefined,
     });
     if (res.status === 429) {
@@ -183,7 +187,7 @@ export class Platform {
     this.saveLocal('results', this.results);
     this.updateProgressFromResult(result);
     if (this.hosted && (result.mode === 'daily' || result.mode === 'challenge' || result.mode === 'score')) {
-      this.api('/leaderboard/submit', { method: 'POST', body: { result, envelope } })
+      this.api('/leaderboard/submit', { method: 'POST', body: { result, envelope, name: this.profile?.name } })
         .catch(() => { /* offline-tolerant: local record already kept */ });
     }
   }
@@ -246,7 +250,11 @@ export class Platform {
       .sort((a, b) => b.score.total - a.score.total)
       .slice(0, 50)
       .map((r) => ({ name: this.profile.name, me: true, ...publicEntry(r) }));
-    if (!this.hosted) return { source: 'local', entries: local, label: 'casual (local)' };
+    // Journey and practice results are never submitted to the server, so those
+    // boards are always local even when hosted.
+    if (!this.hosted || board === 'journey' || board === 'practice') {
+      return { source: 'local', entries: local, label: 'casual (local)' };
+    }
     try {
       const res = await this.api(`/leaderboard?board=${encodeURIComponent(board)}${friends ? '&friends=1' : ''}`);
       return { source: 'global', entries: res.entries, label: res.validated ? 'validated' : 'casual' };

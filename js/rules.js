@@ -169,7 +169,7 @@ export function checkPair(state, a, b) {
   if (!valuesMatch(state.cells[a], state.cells[b])) return { ok: false, reason: 'no-match' };
   const p = pathBetween(state, a, b);
   if (!p.ok) return { ok: false, reason: 'blocked' };
-  return { ok: true, reason: null, via: p.via, path: p.path };
+  return { ok: true, reason: null, via: p.via, path: p.path, a, b };
 }
 
 export function listLegalPairs(state) {

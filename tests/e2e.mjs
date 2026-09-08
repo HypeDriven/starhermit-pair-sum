@@ -16,36 +16,16 @@
  * its expected 404 console message is filtered (the game handles it by design
  * and switches to offline mode).
  *
- * KNOWN GAME BUGS (reported, not fixed here — do not "fix" the test to hide
- * anything beyond the one filtered console signature noted below):
- *
- * 1. Practice mode is dead (knownissues.md defect 1): clicking the Practice
- *    mode card throws `ReferenceError: PRACTICE_DIFFICULTIES is not defined`
- *    (js/main.js:355 uses it without importing it). Practice is deliberately
- *    NOT exercised; the Journey path is unaffected.
- *
- * 2. Pause overlay → Settings/Help is unusable: .pause-overlay has
- *    z-index 80 while .screens has z-index 40 (css/style.css:321,183), so the
- *    settings/help screens render UNDER the still-visible pause overlay and
- *    cannot be seen or clicked. Settings/help are therefore exercised via the
- *    topbar chips during active play (the topbar is covered by the .screen
- *    overlay whenever a full-page screen is open, so mid-round is the only
- *    reachable path).
- *
- * 3. Hover path-preview writes NaN into the preview line: checkPair's success
- *    result (js/rules.js:172) has no `a`/`b` fields, but previewPath
- *    (js/render.js:518-521) reads `check.a`/`check.b`, producing NaN vertex
- *    positions and a one-time `THREE.BufferGeometry.computeBoundingSphere():
- *    Computed radius is NaN` console error. This fires for real players who
- *    hover a legal target with a cell selected. That exact console signature
- *    (and only that one) is filtered below and announced as a note when seen.
- *
- * 4. Undo restores the pair in rules state, but the restored cells' 3D tokens
- *    are not revived (js/render.js syncState never clears `view.dying`): they
- *    finish their pop-out and are only respawned by a later syncState. Until
- *    then those cells cannot be tapped on the canvas (the accessible DOM
- *    mirror and keyboard input still work). The play loop below skips pairs
- *    whose tokens are currently dying, as a human player naturally would.
+ * Regression coverage for previously fixed defects (see knownissues.md):
+ *  - Practice mode must render its setup screen (missing import regression).
+ *  - Pause overlay → Settings must open ABOVE the overlay and return to it
+ *    (.screens z-index must beat .pause-overlay).
+ *  - Hovering a legal target with a cell selected must not produce NaN
+ *    geometry errors (checkPair echoes a/b for previewPath).
+ *  - Undo must revive the restored cells' 3D tokens immediately (dying views
+ *    are revived in syncState), keeping every refilled cell tappable.
+ *  - Opening a full-page screen mid-round pauses the round; Back returns to
+ *    the pause overlay, never silently abandons the round on the title screen.
  */
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -107,12 +87,6 @@ function watch(page, tag) {
     // Expected offline host-detection probe (GET /api/v1/time 404): the game
     // catches this and runs in its supported offline/guest mode.
     if (/Failed to load resource/.test(text) && (m.location()?.url || '').includes('/api/v1/')) return;
-    // Known game bug #3 (see header): hover path-preview writes NaN vertices.
-    // Filtered so the suite can pass; announced loudly when observed.
-    if (/THREE\.BufferGeometry\.computeBoundingSphere\(\): Computed radius is NaN/.test(text)) {
-      console.log(`  note (${tag}): known renderer bug observed — hover path-preview NaN (js/render.js:518-521 reads check.a/check.b, which checkPair never returns)`);
-      return;
-    }
     errors.push(`[${tag}] console: ${text}`);
   });
 }
@@ -123,11 +97,9 @@ const step = async (name, fn) => {
 };
 
 // Read game state for synchronization/targeting only (never acts on the game).
-// `pairs` is filtered to cells that are actually clickable right now: after an
-// undo, the restored cells' 3D tokens finish their pop-out animation and are
-// respawned by the renderer only on a later sync (js/render.js syncState does
-// not revive `dying` views) — a real rendering bug. Until the token respawns,
-// that cell is untappable on the canvas, so those pairs are skipped here.
+// `pairs` is filtered to cells whose 3D tokens are actually clickable right
+// now; after an undo the revived tokens are no longer `dying` (regression
+// coverage: syncState revives them), so every refilled cell stays tappable.
 const readBoard = (page) => page.evaluate(async () => {
   const { listLegalPairs, canAddRows, remainingCount } = await import('./js/rules.js');
   const g = window.__pairsum;
@@ -231,10 +203,9 @@ async function playRound(page, vp) {
     if (b.status !== 'active') return b;
     if (!b.pairs.length) {
       if (b.totalPairs > 0) {
-        // Only dying/not-yet-respawned tokens are legal — nudge the renderer
-        // by selecting and deselecting another filled cell (select → deselect
-        // both route through updateAllUI → syncState, which respawns missing
-        // tokens after their pop-out finishes).
+        // Legal pairs exist but their tokens are mid-animation (e.g. a token
+        // that was still sliding in). Nudge a sync by selecting/deselecting
+        // another filled cell, then retry.
         if (b.nudgeCell == null) throw new Error('no tappable cell to nudge respawn');
         await clickCell(page, b.nudgeCell);
         await clickCell(page, b.nudgeCell);
@@ -277,10 +248,11 @@ async function playRound(page, vp) {
       else await page.click('#btn-pause');
       await page.waitForSelector('#pause-overlay:not([hidden])');
       await page.screenshot({ path: SHOT('pause', vp) });
-      // NOTE: the pause overlay's Settings/Help buttons open screens that render
-      // BELOW the still-visible pause overlay (.pause-overlay z-index 80 vs
-      // .screens z-index 40), so they cannot be exercised from here — a real
-      // game bug. Settings/help are exercised via the topbar mid-round instead.
+      // Pause-menu Settings must open above the overlay and return to it.
+      await page.click('#btn-pause-settings');
+      await page.waitForSelector('#screen-settings:not([hidden])');
+      await page.locator('#screen-settings [data-back]').click();
+      await page.waitForSelector('#pause-overlay:not([hidden])');
       await page.click('#btn-resume');
       await page.waitForSelector('#pause-overlay', { state: 'hidden' });
       pauseChecked = true;
@@ -309,6 +281,15 @@ async function runPass(browser, vp, viewport) {
       await page.waitForSelector('#screen-modes:not([hidden])');
       if (await page.locator('.mode-card').count() !== 6) throw new Error('expected 6 mode cards');
       await page.screenshot({ path: SHOT('modes', vp) });
+    });
+
+    await step(`${vp}: practice setup renders (regression: missing import)`, async () => {
+      await page.locator('.mode-card', { hasText: 'Practice' }).click();
+      await page.waitForSelector('#screen-setup:not([hidden])');
+      const diffs = await page.locator('.diff-btn').count();
+      if (diffs !== 4) throw new Error(`expected 4 difficulty buttons, got ${diffs}`);
+      await page.locator('#screen-setup [data-back]').click();
+      await page.waitForSelector('#screen-modes:not([hidden])');
     });
 
     await step(`${vp}: journey map → stage 1 setup`, async () => {
@@ -363,9 +344,10 @@ async function runPass(browser, vp, viewport) {
       await page.waitForSelector('#screen-title:not([hidden])');
     });
 
-    await step(`${vp}: settings + help via topbar mid-round`, async () => {
-      // The topbar chips are only clickable while no full-page screen is open
-      // (i.e. during active play), so start stage 2 and open them from there.
+    await step(`${vp}: settings + help mid-round pause and return safely`, async () => {
+      // Start stage 2, open Settings via the topbar mid-round: the round must
+      // pause and Back must return to the pause overlay — never silently
+      // abandon the round on the title screen.
       await page.click('#btn-journey');
       await page.waitForSelector('#screen-journey:not([hidden])');
       await page.locator('.stage-node:not(.locked)').nth(1).click();
@@ -375,6 +357,8 @@ async function runPass(browser, vp, viewport) {
 
       await page.click('#btn-settings');
       await page.waitForSelector('#screen-settings:not([hidden])');
+      const machine = await page.evaluate(() => window.__pairsum.session.machine);
+      if (machine !== 'paused') throw new Error(`opening settings mid-round should pause, got ${machine}`);
       await page.locator('input[aria-label="muted"]').check();
       await page.locator('select[aria-label="palette"]').selectOption('deuteranopia');
       await page.locator('input[aria-label="reducedMotion"]').check();
@@ -391,22 +375,21 @@ async function runPass(browser, vp, viewport) {
         throw new Error('settings not persisted: ' + JSON.stringify(saved));
       }
       await page.screenshot({ path: SHOT('settings', vp) });
-      // Back from settings returns to the title screen (game behaviour).
       await page.locator('#screen-settings [data-back]').click();
-      await page.waitForSelector('#screen-title:not([hidden])');
+      await page.waitForSelector('#pause-overlay:not([hidden])');
+      await page.click('#btn-resume');
+      await page.waitForFunction(() => window.__pairsum.session.machine === 'active', null, { timeout: 5000 });
 
-      // Help from the topbar mid-round.
-      await page.click('#btn-journey');
-      await page.locator('.stage-node:not(.locked)').nth(1).click();
-      await page.click('#btn-setup-start');
-      await page.waitForFunction(() => window.__pairsum.session.machine === 'active', null, { timeout: 10000 });
+      // Help from the topbar mid-round: same pause-and-return contract.
       await page.click('#btn-help');
       await page.waitForSelector('#screen-help:not([hidden])');
       const helpBody = await page.textContent('#help-body');
       if (!helpBody.trim()) throw new Error('help body empty');
       await page.screenshot({ path: SHOT('help', vp) });
       await page.keyboard.press('Escape');
-      await page.waitForSelector('#screen-title:not([hidden])');
+      await page.waitForSelector('#pause-overlay:not([hidden])');
+      await page.click('#btn-resume');
+      await page.waitForFunction(() => window.__pairsum.session.machine === 'active', null, { timeout: 5000 });
     });
   } finally {
     await context.close();

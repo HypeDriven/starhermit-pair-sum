@@ -8,9 +8,9 @@ against `server.js`.
 
 | Check | Result |
 | --- | --- |
-| `npm test` | 39/39 pass |
+| `npm test` | 48/48 pass (2026-09-07; includes `tests/server.test.mjs` live API suite) |
 | `node --check` on all modules | clean (8 modules + `server.js`) |
-| `npm run test:e2e` (`tests/e2e.mjs`, headless Chrome) | PASS — desktop + mobile, no page errors (see below) |
+| `npm run test:e2e` (`tests/e2e.mjs`, headless Chrome) | PASS — desktop + mobile, no page errors (2026-09-07) |
 
 Ad-hoc headless-Chrome coverage: boot (0 console errors), all six mode cards opened, a Daily
 round played through hint/undo/add-rows/pause/resume/resize, a **Daily board cleared to a win**
@@ -169,6 +169,112 @@ headless-Chrome Practice-mode check (see each item). `npm test` (39/39) and
   can no longer address (read/overwrite) a specific player's key by name. Verified live: a save
   POST naming `player:"victim"` no longer creates a separate `victim` key — it lands under the
   guest identity, and the `player=victim` query name is ignored.
+
+## Resolved defects (fixed 2026-09-07)
+
+Second review pass (model: Kimi). All fixes verified with `npm test` (48/48,
+including the new `tests/server.test.mjs` integration suite), `npm run
+test:e2e` (desktop + mobile PASS), and a live headless-Chrome smoke run
+against the real `server.js` covering hosted boot, a Daily win submitted and
+listed on the global board, a Score-chase submission, token-keyed saves, and
+reload → Continue.
+
+### 6. Hover path-preview writes NaN vertices (console error on every legal hover)
+
+- **Files:** `js/rules.js:172` (fixed), read by `js/render.js` `previewPath`.
+- **Behaviour:** `checkPair`'s success result had no `a`/`b` fields, but
+  `previewPath` computes the preview line endpoints from `check.a`/`check.b`,
+  producing NaN vertex positions and a
+  `THREE.BufferGeometry.computeBoundingSphere(): Computed radius is NaN`
+  console error for any player who hovered a legal target with a cell selected.
+- **RESOLVED:** `checkPair` now echoes `a`/`b` on success; a unit test pins the
+  contract and the e2e console filter for the NaN signature was removed so a
+  regression fails the suite.
+
+### 7. Undo leaves restored cells untappable on the 3D canvas
+
+- **File:** `js/render.js` `syncState`.
+- **Behaviour:** undo restored the pair in rules state, but the cells' token
+  views kept `dying = true`: they finished their pop-out and were only
+  respawned by a later sync, leaving the restored cells untappable on the
+  canvas (DOM mirror and keyboard still worked).
+- **RESOLVED:** `syncState` revives a dying view when its slot holds a digit
+  again (`dying = false`, scale springs back), so refilled cells are tappable
+  immediately.
+
+### 8. Pause menu → Settings/Help rendered underneath the pause overlay
+
+- **File:** `css/style.css` (`.pause-overlay` z-index 80 vs `.screens` 40).
+- **Behaviour:** Settings/Help opened from the pause menu were invisible and
+  unclickable behind the dimmed overlay.
+- **RESOLVED:** `.screens` now sits at z-index 85 (above the overlay, below
+  toasts). The e2e pause step now exercises pause → Settings → Back → resume.
+
+### 9. Opening a full-page screen mid-round silently abandoned the round
+
+- **File:** `js/main.js` (topbar Help/Settings/Profile handlers, `back()`).
+- **Behaviour:** opening Help/Settings/Profile via the topbar during an active
+  round and pressing Back/Escape went to the title screen while the round was
+  still active — the machine transitioned to `title` with no snapshot, the
+  timed clock kept running while the board was covered, and the round was
+  unrecoverable.
+- **RESOLVED:** the topbar chips now pause the round first (`pauseForScreen`),
+  so Back returns to the pause overlay and Resume continues the round. Escape
+  now acts as Back on any open screen. The e2e mid-round settings/help step
+  asserts the pause-and-return contract.
+
+### 10. Hosted global leaderboards always appeared empty; Score-chase board unreachable
+
+- **Files:** `server.js` `/leaderboard` GET, `js/main.js` `nextAfterResults`,
+  `js/ui.js` `renderBoards`, `js/platform.js` `leaderboard`.
+- **Behaviour:** submissions are stored under `daily:<contentId>` /
+  `challenge:<contentId>`, but the client queried `board=daily` /
+  `board=challenge`, which never matched — hosted boards rendered empty. The
+  Score-chase results button opened the *Challenge* board, and no Score-chase
+  tab existed. Journey/Practice boards (never submitted server-side) hid local
+  results behind an empty global response.
+- **RESOLVED:** the server resolves `daily` to today's daily board and
+  aggregates prefixed boards (`challenge:*`); the results "Scores" button opens
+  the `score` board for Score chase; a Score-chase tab was added; Journey and
+  Practice boards are served from local results even when hosted.
+
+### 11. Leaderboard accepted fabricated boards with self-consistent replays
+
+- **File:** `server.js` `validateSubmission`.
+- **Behaviour:** the replay check used the client-supplied `envelope.init`
+  cells, so a client could invent a trivially clearable layout, claim it was
+  the Daily, and pass validation.
+- **RESOLVED:** the server regenerates the authoritative content for the
+  claimed mode/content id (Daily by date, Challenge by id, Score chase by ISO
+  week) and rejects submissions whose seed/cols/initial cells do not match
+  (`content-mismatch` / `unknown-content`). Covered by `tests/server.test.mjs`.
+
+### 12. Client never authenticated API calls; leaderboard entries had no name
+
+- **File:** `js/platform.js` `api`, `recordResult`; `js/main.js` `boot`.
+- **Behaviour:** the server keys cloud saves by the bearer-token hash (defect
+  5 fix), but the client never sent the launch token, so every save landed
+  under the shared `guest` identity. Submissions carried no player name, so
+  boards showed "Player". `reconcileProgress` existed but was never called, so
+  cloud saves were write-only.
+- **RESOLVED:** `api()` attaches `Authorization: Bearer <launchToken>` when
+  present (memory only, never persisted); submissions include the profile
+  display name; boot reconciles cloud progress when hosted. Smoke-verified:
+  saves land under the token hash, the token is stripped from the URL and never
+  reaches localStorage.
+
+### Minor fixes in the same pass
+
+- `index.html`: removed the leftover emoji data-URI favicon that overrode the
+  authored `favicon.svg`; the toast stack is now `aria-live="polite"` instead
+  of `aria-hidden` so achievement/notice toasts reach screen readers.
+- `js/main.js`: the "no pairs" hint announcement now matches the on-screen
+  alert when Add Rows is unavailable.
+- `server.js`: malformed JSON bodies get HTTP 400 (`bad-json`) instead of 500;
+  the listen log prints the actual bound port; `PAIR_SUM_DATA` env var allows
+  an isolated data dir (used by the test suite); `PORT=0` selects an ephemeral
+  port.
+- `.gitignore`: ignore the runtime `data/` directory.
 
 ## Suspected — not confirmed
 

@@ -11,11 +11,11 @@ import { existsSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { replay, hashState, createGame, RULES_VERSION } from './js/rules.js';
-import { dailyForDate, CONTENT_VERSION } from './js/content.js';
+import { dailyForDate, CHALLENGES, generateBoard, CONTENT_VERSION } from './js/content.js';
 
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
-const DATA = join(ROOT, 'data');
-const PORT = Number(process.env.PORT) || 8080;
+const DATA = process.env.PAIR_SUM_DATA || join(ROOT, 'data');
+const PORT = process.env.PORT !== undefined ? Number(process.env.PORT) : 8080;
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -82,6 +82,41 @@ async function readBody(req) {
 
 // --- score validation ----------------------------------------------------------
 
+// ISO week number, matching the client's weekly score-chase seed.
+function isoWeek(d) {
+  const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const day = (date.getUTCDay() + 6) % 7;
+  date.setUTCDate(date.getUTCDate() - day + 3);
+  const firstThursday = new Date(Date.UTC(date.getUTCFullYear(), 0, 4));
+  return 1 + Math.round(((date - firstThursday) / 86400000 - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7);
+}
+
+// Regenerate the authoritative content a submission claims to have played.
+// The replay log alone cannot prove the board was the published one, so the
+// initial layout must match the server-regenerated definition exactly.
+function expectedDef(result) {
+  if (!result || typeof result.contentId !== 'string') return null;
+  if (result.mode === 'daily') {
+    const m = /^daily-(\d{4})-(\d{2})-(\d{2})$/.exec(result.contentId);
+    if (!m) return null;
+    return dailyForDate(new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])));
+  }
+  if (result.mode === 'challenge') {
+    const c = CHALLENGES.find((x) => x.id === result.contentId);
+    return c ? c.build() : null;
+  }
+  if (result.mode === 'score') {
+    const now = new Date();
+    const seed = `score-${now.getUTCFullYear()}-w${isoWeek(now)}`;
+    const gen = generateBoard(seed, { rows: 5, cols: 9, minDigit: 1, maxDigit: 9 });
+    const pairs = Math.floor(gen.cells.filter(c => c !== 0).length / 2);
+    return { id: seed, seed, cols: 9, cells: gen.cells, mult: 1.5,
+      mechanics: ['equal-pairs', 'sum-pairs', 'seq-paths', 'add-rows'],
+      par: { moves: pairs, timeMs: pairs * 4000 } };
+  }
+  return null;
+}
+
 // Lightweight authoritative check: replay the input log against the declared
 // seed/ruleset and compare hashes. Impossible or stale-version scores rejected.
 function validateSubmission(body) {
@@ -96,6 +131,21 @@ function validateSubmission(body) {
     return { ok: false, error: 'bad-command-log' };
   }
   if (result.assists && result.assists.timingAssist) return { ok: false, error: 'assisted' };
+  // The claimed board must be the authoritative one for this mode/content id,
+  // not a fabricated layout with a self-consistent replay.
+  const def = expectedDef(result);
+  if (!def) return { ok: false, error: 'unknown-content' };
+  const init = envelope.init || {};
+  if (result.seed !== def.seed || init.seed !== def.seed || init.cols !== def.cols ||
+      !Array.isArray(init.cells) || init.cells.join(',') !== def.cells.join(',')) {
+    return { ok: false, error: 'content-mismatch' };
+  }
+  const claimedInit = createGame(init);
+  const expectedInit = createGame(def);
+  if (result.contentId !== def.id || ['limits', 'par', 'mult', 'mechanics'].some(key =>
+      JSON.stringify(claimedInit[key]) !== JSON.stringify(expectedInit[key]))) {
+    return { ok: false, error: 'content-mismatch' };
+  }
   let r;
   try {
     r = replay(envelope);
@@ -136,11 +186,23 @@ async function handleApi(req, res, url) {
   if (path === '/leaderboard' && req.method === 'GET') {
     const board = url.searchParams.get('board') || 'daily';
     const boards = await loadJson('leaderboards.json', {});
+    // Submissions are stored under mode-prefixed keys (`daily:<id>`,
+    // `challenge:<id>`). Resolve the plain board names the client queries:
+    // 'daily' means today's daily board; anything else falls back to
+    // aggregating every board with that prefix.
+    let list = boards[board];
+    if (!list && board === 'daily') list = boards[`daily:${dailyForDate(new Date()).id}`] || [];
+    if (!list) {
+      list = [];
+      for (const [k, v] of Object.entries(boards)) {
+        if (k.startsWith(`${board}:`)) list.push(...v);
+      }
+    }
     // Rank by completion, then lower score-bonus order matches the client's
     // compareResults (spec.md:38): completion, fewer invalid actions, lower
     // elapsed time, then stable session id.
     const rank = (r) => (r.status === 'won' ? 0 : r.status === 'lost' ? 1 : 2);
-    const entries = (boards[board] || [])
+    const entries = list
       .slice()
       .sort((a, b) =>
         rank(a) - rank(b) ||
@@ -251,10 +313,11 @@ const server = http.createServer(async (req, res) => {
     });
     res.end(body);
   } catch (e) {
-    json(res, e.message === 'payload-too-large' ? 413 : 500, { error: e.message || 'error' });
+    const status = e.message === 'payload-too-large' ? 413 : e instanceof SyntaxError ? 400 : 500;
+    json(res, status, { error: e instanceof SyntaxError ? 'bad-json' : e.message || 'error' });
   }
 });
 
 server.listen(PORT, () => {
-  console.log(`Pair Sum listening on http://localhost:${PORT}`);
+  console.log(`Pair Sum listening on http://localhost:${server.address().port}`);
 });

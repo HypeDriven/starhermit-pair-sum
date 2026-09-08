@@ -381,9 +381,14 @@ export class BoardRenderer {
           const target = this.cellToWorld(i);
           view.mesh.position.set(target.x, -1.2, target.z + 2);
         }
-      } else if (view.digit !== digit) {
-        view.digit = digit;
-        view.mesh.material = this.tokenMaterials[digit];
+      } else {
+        // A refilled slot (e.g. undo) revives a token that was still playing
+        // its pop-out animation, so the cell stays tappable immediately.
+        if (view.dying) { view.dying = false; view.targetScale = 1; }
+        if (view.digit !== digit) {
+          view.digit = digit;
+          view.mesh.material = this.tokenMaterials[digit];
+        }
       }
       view.target = this.cellToWorld(i);
       view.target.y = 0;
