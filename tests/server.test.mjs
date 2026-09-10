@@ -123,7 +123,9 @@ test('fabricated board with a self-consistent replay is rejected', async () => {
   const def = dailyForDate(new Date());
   const sub = genuineSubmission(def);
   // Lie about the initial layout: same seed, trivially clearable cells.
-  sub.envelope.init.cells = [4, 4].concat(def.cells.slice(2));
+  // Pick a fabricated pair that is guaranteed to differ from the real cells.
+  const fabricated = def.cells[0] === 4 && def.cells[1] === 4 ? [3, 3] : [4, 4];
+  sub.envelope.init.cells = fabricated.concat(def.cells.slice(2));
   const { status, body } = await api('/leaderboard/submit', { method: 'POST', body: sub });
   assert.equal(status, 422);
   assert.equal(body.error, 'content-mismatch');
