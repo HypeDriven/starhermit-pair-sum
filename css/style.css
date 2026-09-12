@@ -192,6 +192,9 @@ body.left-handed .action-tray { flex-direction: row-reverse; }
   background: var(--paper); pointer-events: auto;
   display: flex; flex-direction: column; align-items: center; text-align: center;
 }
+.screen > * { flex-shrink: 0; }
+/* overflowing title content stays reachable from the top (safe centring) */
+.screen-title { justify-content: safe center; }
 .screen[hidden] { display: none; }
 .screen h1 { font-family: var(--serif); font-size: clamp(1.8rem, 5vw, 2.6rem); margin: 4vh 0 8px; }
 .screen-sub { opacity: 0.75; margin-top: 0; max-width: 70ch; }
@@ -369,6 +372,10 @@ kbd {
   .layout { height: calc(100dvh - 40px - var(--sat)); }
   .action-tray { left: auto; right: calc(10px + var(--sar)); transform: none; flex-direction: column; bottom: calc(10px + var(--sab)); border-radius: 18px; }
   .tray-btn { min-width: 64px; }
+  /* lesson instructions become a compact left side panel, off the board */
+  .lesson-banner { left: calc(10px + var(--sal)); transform: none; top: calc(48px + var(--sat)); max-width: min(34vw, 260px); padding: 8px 10px; font-size: 0.85rem; }
+  .lesson-actions { margin-top: 6px; }
+  .hud { max-width: 56vw; }
 }
 
 /* Reduced motion: remove non-essential animation (event timing preserved). */

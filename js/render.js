@@ -13,8 +13,8 @@ export const FRAMING = {
   tokenScale: 0.86,       // token footprint within a cell
   cameraTilt: 0.62,       // radians from vertical (near-tabletop)
   cameraDistance: 14,
-  marginX: 1.6,           // board margin in world units
-  marginY: 2.2,
+  marginX: 0.8,           // board margin in world units
+  marginY: 1.0,
   shakeAmplitude: 0.05,   // low amplitude, event-tiered
 };
 
@@ -339,6 +339,39 @@ export class BoardRenderer {
     const h = this.container.clientHeight || 1;
     this.renderer.setSize(w, h);
     this.fitCamera(w / h);
+    // HUD chrome appears/disappears without a resize: refit when it does.
+    if (!this._hudObserver && typeof MutationObserver === 'function' && typeof document !== 'undefined') {
+      this._hudObserver = new MutationObserver(() => this.fitCamera((this.container.clientWidth || 1) / (this.container.clientHeight || 1)));
+      for (const id of ['hud', 'lesson-banner', 'action-tray']) {
+        const el = document.getElementById(id);
+        if (el) this._hudObserver.observe(el, { attributes: true, childList: true, subtree: true, attributeFilter: ['hidden', 'class', 'style'] });
+      }
+    }
+  }
+
+  // HUD chrome overlaying the canvas (objective band, lesson banner, action
+  // tray) as fractions of the canvas; the board is fitted inside the rest.
+  hudInsets() {
+    const ins = { l: 0, r: 0, t: 0, b: 0 };
+    if (typeof document === 'undefined') return ins;
+    const cr = this.container.getBoundingClientRect();
+    const W = cr.width || 1, H = cr.height || 1;
+    for (const id of ['hud', 'lesson-banner', 'action-tray']) {
+      const el = document.getElementById(id);
+      if (!el || el.hidden || !el.offsetParent) continue;
+      const r = el.getBoundingClientRect();
+      if (!r.width || !r.height) continue;
+      const e = { l: (r.left - cr.left) / W, t: (r.top - cr.top) / H, r: (r.right - cr.left) / W, b: (r.bottom - cr.top) / H };
+      if (e.b <= 0.5 && e.r - e.l > 0.45) ins.t = Math.max(ins.t, e.b);
+      else if (e.t >= 0.5 && e.r - e.l > 0.45) ins.b = Math.max(ins.b, 1 - e.t);
+      else if (e.l >= 0.55) ins.r = Math.max(ins.r, 1 - e.l);
+      else if (e.r <= 0.45) ins.l = Math.max(ins.l, e.r);
+      else if (e.t >= 0.5) ins.b = Math.max(ins.b, 1 - e.t);
+      else ins.t = Math.max(ins.t, e.b);
+    }
+    if (ins.t + ins.b > 0.65) { ins.t = Math.min(ins.t, 0.35); ins.b = Math.min(ins.b, 0.3); }
+    if (ins.l + ins.r > 0.6) { ins.l = 0; ins.r = 0; }
+    return ins;
   }
 
   fitCamera(aspect) {
@@ -346,13 +379,19 @@ export class BoardRenderer {
     const rows = Math.max(3, Math.ceil((this.state?.cells.length || cols * 4) / cols));
     const halfW = (cols * FRAMING.cellSize) / 2 + FRAMING.marginX;
     const halfH = (rows * FRAMING.cellSize) / 2 + FRAMING.marginY;
-    let vw = halfW;
-    let vh = halfW / aspect;
-    if (vh < halfH) { vh = halfH; vw = halfH * aspect; }
-    this.camera.left = -vw;
-    this.camera.right = vw;
-    this.camera.top = vh;
-    this.camera.bottom = -vh;
+    // fit the board into the HUD-free part of the canvas (ortho: offset the
+    // frustum so the board is centred in that area)
+    const ins = this.hudInsets();
+    const freeW = Math.max(0.35, 1 - ins.l - ins.r), freeH = Math.max(0.35, 1 - ins.t - ins.b);
+    const w = this.container.clientWidth || 1, h = this.container.clientHeight || 1;
+    let vw = halfW / freeW;
+    let vh = vw / aspect;
+    if (vh * freeH < halfH) { vh = halfH / freeH; vw = vh * aspect; }
+    const cx = (ins.l - ins.r) * vw, cy = (ins.b - ins.t) * vh;
+    this.camera.left = -vw + cx;
+    this.camera.right = vw + cx;
+    this.camera.top = vh + cy;
+    this.camera.bottom = -vh + cy;
     const tilt = FRAMING.cameraTilt;
     const d = FRAMING.cameraDistance;
     this.camera.position.set(0, Math.cos(tilt) * d, Math.sin(tilt) * d);
