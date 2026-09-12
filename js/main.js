@@ -44,7 +44,9 @@ async function boot() {
   wireInput();
   initRenderer();
   ui.applySettingsClasses(platform.settings);
+  platform.onSyncChange = () => { ui.updateSyncNote(); };
   ui.updateProfileChip();
+  ui.updateSyncNote();
 
   session.transition('title', 'boot-complete');
   ui.renderTitle(platform.progress, dailyForDate(new Date(platform.serverNow())), session.hasSnapshot());

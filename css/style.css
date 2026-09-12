@@ -88,6 +88,9 @@ button { font-family: inherit; cursor: pointer; }
 .mini-progress { font-size: 0.85rem; opacity: 0.8; line-height: 1.5; }
 .rail-context { font-size: 0.9rem; line-height: 1.55; }
 .presence-note { margin-top: 12px; font-size: 0.8rem; opacity: 0.6; }
+.presence-note[data-sync="synced"] { opacity: 0.75; }
+.presence-note[data-sync="saving"] { opacity: 0.75; font-style: italic; }
+.presence-note[data-sync="error"] { opacity: 0.85; color: #a33; }
 
 /* --- stage --- */
 .stage { position: relative; overflow: hidden; background: var(--paper); }

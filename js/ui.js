@@ -28,6 +28,15 @@ export function fmtMs(ms) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
+export function syncText(state) {
+  return {
+    offline: 'Off — local only',
+    saving: 'Saving…',
+    synced: 'Synced',
+    error: 'Unavailable — retrying with your next save',
+  }[state] || 'Off — local only';
+}
+
 export const DEFAULT_BINDINGS = {
   'Arrow keys': 'Move among cells',
   'Enter / Space': 'Select / connect',
@@ -113,6 +122,20 @@ export class UI {
   updateProfileChip() {
     $('btn-profile').textContent = this.platform.profile.guest
       ? '👤 Guest' : `👤 ${this.platform.profile.name}`;
+  }
+
+  // Cloud-save status, shown in the right-rail status slot.
+  updateSyncNote() {
+    const el = $('presence-note');
+    if (!el) return;
+    const text = {
+      offline: 'Offline — progress stays on this device.',
+      saving: 'Saving to your account…',
+      synced: 'Progress synced to your account.',
+      error: 'Cloud sync unavailable — changes kept on this device.',
+    }[this.platform.syncState] || '';
+    el.textContent = text;
+    el.dataset.sync = this.platform.syncState;
   }
 
   // --- HUD -------------------------------------------------------------------
@@ -485,17 +508,18 @@ export class UI {
       table.append(h('tr', {},
         h('td', { text: String(i + 1) }),
         h('td', { text: e.name || '—' }),
-        h('td', { class: 'num', text: String(e.score) }),
-        h('td', { class: 'num', text: String(e.moves) }),
-        h('td', { class: 'num', text: fmtMs(e.elapsedMs) }),
-        h('td', { text: e.status === 'won' ? '✓' : '✗' })));
+        h('td', { class: 'num', text: String(e.score ?? 0) }),
+        h('td', { class: 'num', text: e.moves == null ? '—' : String(e.moves) }),
+        h('td', { class: 'num', text: e.elapsedMs == null ? '—' : fmtMs(e.elapsedMs) }),
+        h('td', { text: e.status == null ? '—' : e.status === 'won' ? '✓' : '✗' })));
     });
     if (!res.entries.length) table.append(h('tr', {}, h('td', { colspan: '6', text: 'No entries yet — be the first.' })));
     body.append(table);
     body.append(h('p', {
       class: 'board-note',
-      text: `Board: ${res.label}. Submissions include ruleset, content version, seed, assists and duration; ` +
-        `impossible or stale-version scores are rejected.`,
+      text: res.source === 'global'
+        ? `Board: ${res.label}. Platform leaderboard is read-only; personal bests are kept on this device and synced with your account.`
+        : `Board: ${res.label}. Personal bests on this device; the bundled dev server validates submissions (ruleset, content version, seed, assists, duration) and rejects impossible or stale-version scores.`,
     }));
   }
 
@@ -505,31 +529,37 @@ export class UI {
     const body = $('profile-body');
     body.innerHTML = '';
     const row = (label, control) => h('div', { class: 'set-row' }, h('label', { text: label }), control);
-    const nameInput = h('input', {
-      type: 'text', value: p.guest ? '' : p.name, maxlength: '24',
-      placeholder: 'Display name', 'aria-label': 'Display name',
-      onchange: (e) => {
-        const v = e.target.value.trim().slice(0, 24);
-        if (v) {
-          p.name = v;
-          p.guest = false;
-          this.platform.saveProfile();
-          this.updateProfileChip();
-          this.toast('Name saved locally.');
-        }
-      },
-    });
+    const hosted = this.platform.hosted;
+    // Hosted accounts use the platform nickname; the local edit field is for
+    // guest/offline play only.
+    const nameControl = hosted
+      ? h('strong', { text: p.name })
+      : h('input', {
+        type: 'text', value: p.guest ? '' : p.name, maxlength: '24',
+        placeholder: 'Display name', 'aria-label': 'Display name',
+        onchange: (e) => {
+          const v = e.target.value.trim().slice(0, 24);
+          if (v) {
+            p.name = v;
+            p.guest = false;
+            this.platform.saveProfile();
+            this.updateProfileChip();
+            this.toast('Name saved locally.');
+          }
+        },
+      });
     body.append(
-      row('Display name', nameInput),
-      row('Account', h('span', { text: p.guest ? 'Guest — progress is stored on this device.' : 'Local profile' })),
+      row('Display name', nameControl),
+      row('Account', h('span', { text: hosted ? 'StarHermit account' : (p.guest ? 'Guest — progress is stored on this device.' : 'Local profile') })),
       row('Boards cleared', h('strong', { text: String(prog.totals.clears) })),
       row('Pairs connected', h('strong', { text: String(prog.totals.pairs) })),
       row('Days played', h('strong', { text: String(prog.streakDays.length) })),
+      row('Cloud sync', h('span', { text: syncText(this.platform.syncState) })),
       h('p', {
         class: 'result-note',
-        text: this.platform.hosted
-          ? 'Connected to host — progress syncs to the cloud with conflict-safe merge.'
-          : 'Offline mode — sign-in and cloud save activate when hosted.',
+        text: hosted
+          ? 'Connected to the platform — progress syncs to your account cloud save with conflict-safe merge.'
+          : 'Offline mode — cloud save and platform identity activate when launched by the host.',
       }),
     );
   }
