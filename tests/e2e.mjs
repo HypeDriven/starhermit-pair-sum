@@ -81,13 +81,13 @@ const errors = [];
 function watch(page, tag) {
   page.on('pageerror', (e) => errors.push(`[${tag}] pageerror: ${e.message}`));
   page.on('console', (m) => {
-    if (m.type() !== 'error') return;
+    if (m.type() !== 'error' && m.type() !== 'warning') return;
     const text = m.text();
     if (browserNoise.test(text)) return;
     // Expected offline host-detection probe (GET /api/v1/time 404): the game
     // catches this and runs in its supported offline/guest mode.
     if (/Failed to load resource/.test(text) && (m.location()?.url || '').includes('/api/v1/')) return;
-    errors.push(`[${tag}] console: ${text}`);
+    errors.push(`[${tag}] console ${m.type()}: ${text}`);
   });
 }
 
@@ -261,6 +261,82 @@ async function playRound(page, vp) {
   throw new Error('round did not terminate within 200 actions');
 }
 
+// Graphics settings through the visible UI: preset Low → High (applied to the
+// canvas/body), a per-effect override, Ultra clears overrides, the frame-rate
+// readout, persistence across a reload, then back to Auto for the rest of the run.
+async function graphicsSettings(page, vp) {
+  const state = () => page.evaluate(() => ({
+    canvas: document.querySelector('#canvas-host canvas')?.dataset.gfxPreset,
+    body: document.body.dataset.gfxPreset,
+    q: window.__pairsum.renderer?.q,
+    saved: JSON.parse(localStorage.getItem('pairsum:settings') || '{}').graphics,
+    summary: document.getElementById('gfx-summary')?.textContent || '',
+  }));
+  const openGfx = async () => {
+    await page.click('#btn-title-settings');
+    await page.waitForSelector('#screen-settings:not([hidden]) #gfx-section #gfx-preset');
+    await page.locator('#gfx-preset').scrollIntoViewIfNeeded();
+  };
+  await page.waitForFunction(() => !!window.__pairsum.renderer);
+  await openGfx();
+  const autoLabel = await page.locator('#gfx-preset option[value="auto"]').textContent();
+  if (!/Auto \(detected: Low\)/.test(autoLabel)) throw new Error(`software GPU should auto-detect Low: ${autoLabel}`);
+
+  await page.selectOption('#gfx-preset', 'low');
+  let st = await state();
+  if (st.canvas !== 'low' || st.body !== 'low' || st.q.post) throw new Error('Low not applied: ' + JSON.stringify(st));
+
+  await page.selectOption('#gfx-preset', 'high');
+  await page.waitForTimeout(600); // a few frames with the High post chain
+  st = await state();
+  if (st.canvas !== 'high' || st.q.bloom !== 'on' || st.q.ao !== 'on') throw new Error('High not applied: ' + JSON.stringify(st.q));
+  if (!/bloom/.test(st.summary) || !/px/.test(st.summary)) throw new Error('summary missing: ' + st.summary);
+  const fromPreset = await page.locator('#gfx-cat-shadows option[value="preset"]').textContent();
+  if (!/From preset \(Medium\)/.test(fromPreset)) throw new Error('preset label: ' + fromPreset);
+
+  await page.selectOption('#gfx-cat-bloom', 'off');
+  st = await state();
+  if (st.q.bloom !== 'off' || st.saved.bloom !== 'off') throw new Error('bloom override not applied: ' + JSON.stringify(st));
+  if (/bloom/.test(st.summary)) throw new Error('summary still lists bloom: ' + st.summary);
+
+  // Ultra clears the override; then High + override again for the reload check.
+  await page.selectOption('#gfx-preset', 'ultra');
+  await page.waitForTimeout(600);
+  st = await state();
+  if (st.q.bloom !== 'on' || st.saved.bloom !== undefined) throw new Error('preset did not clear overrides');
+  if (await page.inputValue('#gfx-cat-bloom') !== 'preset') throw new Error('override select not reset');
+  await page.selectOption('#gfx-preset', 'high');
+  await page.selectOption('#gfx-cat-bloom', 'off');
+  await page.locator('#gfx-fps').check();
+  if (await page.locator('#fps-meter').isHidden()) throw new Error('fps readout not shown');
+  if (vp === 'mobile') {
+    // Panel fits the phone width (no horizontal overflow).
+    const over = await page.evaluate(() => document.getElementById('screen-settings').scrollWidth - innerWidth);
+    if (over > 1) throw new Error(`settings panel overflows by ${over}px`);
+  }
+  await page.locator('#gfx-summary').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: SHOT('graphics', vp) });
+
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForSelector('#screen-title:not([hidden])');
+  await page.waitForFunction(() => !!window.__pairsum?.renderer);
+  await openGfx();
+  st = await state();
+  if (st.canvas !== 'high' || st.q.bloom !== 'off' || !st.q.showFps) throw new Error('not restored after reload: ' + JSON.stringify(st.q));
+  if (await page.inputValue('#gfx-preset') !== 'high' || await page.inputValue('#gfx-cat-bloom') !== 'off') {
+    throw new Error('panel does not show the saved settings after reload');
+  }
+  // Keyboard: the preset select is reachable and operable.
+  await page.focus('#gfx-preset');
+  await page.selectOption('#gfx-preset', 'auto');
+  await page.locator('#gfx-fps').uncheck();
+  st = await state();
+  if (st.q.preset !== 'low' || !st.q.auto || st.saved.bloom !== undefined) throw new Error('auto not restored: ' + JSON.stringify(st.q));
+  if (await page.locator('#fps-meter').isVisible()) throw new Error('fps readout still visible');
+  await page.locator('#screen-settings [data-back]').click();
+  await page.waitForSelector('#screen-title:not([hidden])');
+}
+
 async function runPass(browser, vp, viewport) {
   const context = await browser.newContext({
     viewport,
@@ -274,6 +350,10 @@ async function runPass(browser, vp, viewport) {
       await page.waitForSelector('#screen-title:not([hidden])', { timeout: 15000 });
       await page.waitForFunction(() => window.__pairsum?.session.machine === 'title');
       await page.screenshot({ path: SHOT('title', vp) });
+    });
+
+    await step(`${vp}: title Settings → Graphics presets, override, persistence`, async () => {
+      await graphicsSettings(page, vp);
     });
 
     await step(`${vp}: play → mode select`, async () => {
@@ -407,7 +487,7 @@ let browser;
 try {
   browser = await chromium.launch({
     executablePath: '/usr/bin/google-chrome',
-    args: ['--no-sandbox', '--enable-unsafe-swiftshader'],
+    args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
   });
   await runPass(browser, 'desktop', { width: 1280, height: 800 });
   await runPass(browser, 'mobile', { width: 390, height: 844 });

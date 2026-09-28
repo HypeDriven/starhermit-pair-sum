@@ -4,7 +4,19 @@
 // Rendering consumes immutable rules snapshots; it never mutates rules state.
 
 import * as THREE from '../vendor/three.module.js';
+// Post-processing + IBL addons vendored from the same three.js release (r160).
+import { EffectComposer } from '../vendor/three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from '../vendor/three/addons/postprocessing/RenderPass.js';
+import { ShaderPass } from '../vendor/three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from '../vendor/three/addons/postprocessing/OutputPass.js';
+import { GTAOPass } from '../vendor/three/addons/postprocessing/GTAOPass.js';
+import { UnrealBloomPass } from '../vendor/three/addons/postprocessing/UnrealBloomPass.js';
+import { SMAAPass } from '../vendor/three/addons/postprocessing/SMAAPass.js';
+import { FXAAShader } from '../vendor/three/addons/shaders/FXAAShader.js';
+import { RoomEnvironment } from '../vendor/three/addons/environments/RoomEnvironment.js';
+import { mergeVertices } from '../vendor/three/addons/utils/BufferGeometryUtils.js';
 import { getTheme } from './content.js';
+import { detectPreset, describe, resolve, SHADOW_MAP } from './gfx.js';
 
 // Authored framing constants (no magic offsets elsewhere).
 export const FRAMING = {
@@ -18,11 +30,54 @@ export const FRAMING = {
   shakeAmplitude: 0.05,   // low amplitude, event-tiered
 };
 
-export const QUALITY_TIERS = {
-  low:    { pixelRatio: 1,   shadows: false, particleCap: 500,  antialias: false, envDetail: 0 },
-  medium: { pixelRatio: 1.5, shadows: false, particleCap: 2000, antialias: true,  envDetail: 1 },
-  high:   { pixelRatio: 2,   shadows: true,  particleCap: 5000, antialias: true,  envDetail: 2 },
+// Lighting is authored at a moderate level and lifted by exposure, so the lit
+// page sits well below the bloom threshold and only highlights, the selection
+// marker and effect sparks bloom.
+const LIGHT = { exposure: 2.3, key: 0.77, hemi: 0.23, env: 0.14 };
+// Unlit markers/effects are authored in display terms; divide out the exposure.
+const UNLIT = 1 / LIGHT.exposure;
+const PARTICLE_CAP = { low: 600, high: 3000 };
+const MOTE_COUNT = { low: 36, high: 80 };
+
+// Colour grade + vignette (display-space colours in, display-space out).
+// Mild S-curve and saturation; lifted blacks keep ink digits crisp.
+const GradeShader = {
+  uniforms: { tDiffuse: { value: null }, uAmount: { value: 1.0 }, uVignette: { value: 0.16 } },
+  vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `
+    uniform sampler2D tDiffuse; uniform float uAmount; uniform float uVignette;
+    varying vec2 vUv;
+    void main() {
+      vec4 src = texture2D(tDiffuse, vUv);
+      vec3 c = clamp(src.rgb, 0.0, 1.0);
+      vec3 s = mix(c, c * c * (3.0 - 2.0 * c), 0.18);
+      float l = dot(s, vec3(0.299, 0.587, 0.114));
+      s = mix(vec3(l), s, 1.07);
+      s *= mix(vec3(0.97, 0.985, 1.04), vec3(1.025, 1.0, 0.97), smoothstep(0.2, 0.85, l));
+      c = mix(c, s, uAmount);
+      float d = length((vUv - 0.5) * vec2(1.0, 0.9));
+      c *= 1.0 - uVignette * smoothstep(0.38, 0.85, d);
+      gl_FragColor = vec4(c, src.a);
+    }`,
 };
+
+function readGpu(renderer) {
+  try {
+    const gl = renderer.getContext();
+    // Firefox already reports the unmasked name and warns on the extension.
+    const ff = typeof navigator !== 'undefined' && /firefox/i.test(navigator.userAgent);
+    const ext = ff ? null : gl.getExtension('WEBGL_debug_renderer_info');
+    return String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+  } catch {
+    return '';
+  }
+}
+
+function isMobileDevice() {
+  if (typeof navigator === 'undefined') return false;
+  const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+  return coarse || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent || '');
+}
 
 const LAYER_ENV = 0;      // default layer: environment
 const LAYER_PICK = 1;     // explicit interaction layer (only tokens)
@@ -34,30 +89,148 @@ function makeDigitTexture(theme, digit) {
   const cv = document.createElement('canvas');
   cv.width = cv.height = S;
   const g = cv.getContext('2d');
-  // Token body: padded solid edge so box sides stretch into a clean rim.
+  // Outer band = side/bevel colour (token sides sample the corner of this).
   g.fillStyle = theme.tokenEdge;
   g.fillRect(0, 0, S, S);
-  const pad = 22;
+  const pad = 12;
   g.fillStyle = theme.token;
-  roundRect(g, pad, pad, S - pad * 2, S - pad * 2, 26);
+  roundRect(g, pad, pad, S - pad * 2, S - pad * 2, 30);
   g.fill();
-  // Subtle top-light gradient for a dimensional read without post effects.
+  // Soft top-light across the face for a dimensional read without post effects.
   const grad = g.createLinearGradient(0, pad, 0, S - pad);
-  grad.addColorStop(0, 'rgba(255,255,255,0.35)');
-  grad.addColorStop(0.5, 'rgba(255,255,255,0)');
-  grad.addColorStop(1, 'rgba(0,0,0,0.10)');
+  grad.addColorStop(0, 'rgba(255,255,255,0.32)');
+  grad.addColorStop(0.55, 'rgba(255,255,255,0)');
+  grad.addColorStop(1, 'rgba(0,0,0,0.08)');
   g.fillStyle = grad;
-  roundRect(g, pad, pad, S - pad * 2, S - pad * 2, 26);
+  roundRect(g, pad, pad, S - pad * 2, S - pad * 2, 30);
   g.fill();
-  // Digit
-  g.fillStyle = theme.ink;
-  g.font = `700 ${S * 0.52}px Georgia, 'Times New Roman', serif`;
+  // Debossed inner frame (pressed card).
+  g.lineWidth = 3;
+  g.strokeStyle = 'rgba(0,0,0,0.10)';
+  roundRect(g, 34, 36, S - 68, S - 68, 22);
+  g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,0.45)';
+  roundRect(g, 34, 34, S - 68, S - 68, 22);
+  g.stroke();
+  // Digit with a faint pressed-ink highlight below it.
+  g.font = `700 ${S * 0.54}px Georgia, 'Times New Roman', serif`;
   g.textAlign = 'center';
   g.textBaseline = 'middle';
+  g.fillStyle = 'rgba(255,255,255,0.55)';
+  g.fillText(String(digit), S / 2, S / 2 + S * 0.03 + 2);
+  g.fillStyle = theme.ink;
   g.fillText(String(digit), S / 2, S / 2 + S * 0.03);
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
+  return tex;
+}
+
+// Rounded, bevelled token: top cap UVs span the whole digit texture; the
+// sides sample the texture's outer band (token edge colour).
+function makeTokenGeometry(detailed) {
+  const t = FRAMING.tokenScale * FRAMING.cellSize;
+  const bevel = detailed ? 0.045 : 0.03;
+  const inner = t / 2 - bevel;
+  const r = detailed ? 0.1 : 0.06;
+  const shape = new THREE.Shape();
+  shape.moveTo(-inner + r, -inner);
+  shape.lineTo(inner - r, -inner);
+  shape.quadraticCurveTo(inner, -inner, inner, -inner + r);
+  shape.lineTo(inner, inner - r);
+  shape.quadraticCurveTo(inner, inner, inner - r, inner);
+  shape.lineTo(-inner + r, inner);
+  shape.quadraticCurveTo(-inner, inner, -inner, inner - r);
+  shape.lineTo(-inner, -inner + r);
+  shape.quadraticCurveTo(-inner, -inner, -inner + r, -inner);
+  const depth = Math.max(0.02, FRAMING.tokenHeight - bevel * 2);
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel,
+    bevelSegments: detailed ? 4 : 1, curveSegments: detailed ? 5 : 2,
+  });
+  geo.rotateX(-Math.PI / 2);
+  geo.translate(0, -depth / 2, 0);
+  const pos = geo.attributes.position;
+  const uv = geo.attributes.uv;
+  const capEnd = geo.groups[0] ? geo.groups[0].start + geo.groups[0].count : 0;
+  const index = geo.index;
+  const capVerts = new Set();
+  for (let i = 0; i < capEnd; i++) capVerts.add(index ? index.getX(i) : i);
+  for (let i = 0; i < pos.count; i++) {
+    if (capVerts.has(i)) uv.setXY(i, (pos.getX(i) + t / 2) / t, (t / 2 - pos.getZ(i)) / t);
+    else uv.setXY(i, 0.018, 0.5);
+  }
+  uv.needsUpdate = true;
+  geo.clearGroups();
+  // Weld shared positions (same uv) so the bevel shades smoothly.
+  geo.deleteAttribute('normal');
+  const welded = mergeVertices(geo, 1e-4);
+  geo.dispose();
+  welded.computeVertexNormals();
+  return welded;
+}
+
+// Soft round sprite for sparks and dust motes.
+function makeSpriteTexture() {
+  const S = 64;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = S;
+  const g = cv.getContext('2d');
+  const grad = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.35, 'rgba(255,255,255,0.8)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, S, S);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// Faint pencil outline marking every cell slot (shows the grid as it empties).
+function makeSlotTexture(theme) {
+  const S = 128;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = S;
+  const g = cv.getContext('2d');
+  g.strokeStyle = theme.rule;
+  g.globalAlpha = 0.75;
+  g.lineWidth = 4;
+  g.setLineDash([10, 7]);
+  roundRect(g, 10, 10, S - 20, S - 20, 16);
+  g.stroke();
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// Seeded paper-fibre height field for the page's bump map.
+function makeGrainTexture() {
+  const S = 256;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = S;
+  const g = cv.getContext('2d');
+  const img = g.createImageData(S, S);
+  let s = 424242;
+  for (let i = 0; i < S * S; i++) {
+    s = (s * 1103515245 + 12345) & 0x7fffffff;
+    const v = 118 + (s % 21);
+    img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = v;
+    img.data[i * 4 + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  // a few long fibres
+  g.strokeStyle = 'rgba(160,160,160,0.5)';
+  g.lineWidth = 1;
+  for (let k = 0; k < 60; k++) {
+    s = (s * 1103515245 + 12345) & 0x7fffffff;
+    const x = s % S; s = (s * 1103515245 + 12345) & 0x7fffffff;
+    const y = s % S; s = (s * 1103515245 + 12345) & 0x7fffffff;
+    const a = (s % 628) / 100;
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * 14, y + Math.sin(a) * 14); g.stroke();
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   return tex;
 }
 
@@ -132,7 +305,8 @@ export class BoardRenderer {
     this.emit = opts.emit || (() => {});
     this.theme = getTheme(opts.themeId);
     this.reducedMotion = false;
-    this.tierName = opts.quality || 'medium';
+    // Ambient motion also honours the OS-level reduced-motion preference.
+    this.osReducedMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
     this.state = null;
     this.selection = null;
     this.legalTargets = [];
@@ -144,18 +318,31 @@ export class BoardRenderer {
     this.animTime = 0;
     this.shake = 0;
     this.contextLost = false;
+    this.size = [0, 0];
+    this.pixelRatio = 0;
+    this.adaptiveScale = 1;
+    this._frames = [];
+    this.fps = 0;
+    this.composer = null;
+    this.postKey = null;
+    this.postFailed = false;
 
-    const tier = QUALITY_TIERS[this.tierName];
+    // MSAA is done in the composer's multisampled target (switchable live),
+    // so the canvas itself never pays for multisampling.
     this.renderer = new THREE.WebGLRenderer({
-      antialias: tier.antialias, alpha: false, powerPreference: 'high-performance',
+      antialias: false, alpha: false, powerPreference: 'high-performance',
     });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.0;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, tier.pixelRatio));
-    this.renderer.shadowMap.enabled = tier.shadows;
+    this.renderer.toneMappingExposure = LIGHT.exposure;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(this.renderer.domElement);
+
+    this.gpu = readGpu(this.renderer);
+    this.mobile = isMobileDevice();
+    this.detected = detectPreset(this.gpu, this.mobile);
+    this.gfxSaved = opts.graphics || {};
+    this.q = resolve(this.gfxSaved, this.detected);
 
     this.renderer.domElement.addEventListener('webglcontextlost', (e) => {
       e.preventDefault();
@@ -177,43 +364,67 @@ export class BoardRenderer {
 
     this.tokenGroup = new THREE.Group();
     this.scene.add(this.tokenGroup);
+    this.spriteTex = makeSpriteTexture();
 
+    this.buildImageLighting();
     this.buildLights();
     this.buildEnvironment();
     this.buildMarkers();
-    this.buildParticles(tier.particleCap);
+    this.buildParticles();
+    this.buildMotes();
     this.rebuildDigitTextures();
+    this.tokenGeo = makeTokenGeometry(this.q.detail === 'detailed');
+    this.builtDetail = this.q.detail;
 
-    // Shared geometry for all tokens (one draw-call-friendly box).
-    const t = FRAMING.tokenScale * FRAMING.cellSize;
-    this.tokenGeo = new THREE.BoxGeometry(t, FRAMING.tokenHeight, t);
-
-    this.clock = new THREE.Clock();
     this.running = false;
+    this.setGraphics(this.gfxSaved);
     this.resize();
   }
 
   // --- scene construction ---------------------------------------------------
 
+  // Image-based lighting: a prefiltered room environment gives PBR tokens
+  // soft reflections and a gentle fill.
+  buildImageLighting() {
+    this.envTex?.dispose();
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    const room = new RoomEnvironment(this.renderer);
+    this.envTex = pmrem.fromScene(room, 0.04).texture;
+    room.dispose();
+    pmrem.dispose();
+    this.scene.environment = this.envTex;
+  }
+
   buildLights() {
-    this.keyLight = new THREE.DirectionalLight(0xffffff, 2.4);
+    this.keyLight = new THREE.DirectionalLight(0xfff4e6, LIGHT.key);
     this.keyLight.position.set(4, 10, 5);
-    this.keyLight.castShadow = QUALITY_TIERS[this.tierName].shadows;
     this.keyLight.shadow.mapSize.set(1024, 1024);
+    this.keyLight.shadow.bias = -0.0004;
+    this.keyLight.shadow.normalBias = 0.02;
+    this.keyLight.shadow.radius = 3;
     this.scene.add(this.keyLight);
-    this.fill = new THREE.HemisphereLight(0xfff6e0, 0x8a87a0, 0.9);
+    this.fill = new THREE.HemisphereLight(0xfff6e0, 0x8a87a0, LIGHT.hemi);
     this.scene.add(this.fill);
   }
 
   buildEnvironment() {
     if (this.paper) {
       this.paper.geometry.dispose();
+      this.paper.material.dispose();
       this.scene.remove(this.paper);
     }
     if (this.paperTex) this.paperTex.dispose();
     this.paperTex = makePaperTexture(this.theme);
     this.paperTex.repeat.set(3, 3);
-    const mat = new THREE.MeshStandardMaterial({ map: this.paperTex, roughness: 0.95, metalness: 0 });
+    const detailed = this.q.detail === 'detailed';
+    if (detailed && !this.grainTex) {
+      this.grainTex = makeGrainTexture();
+      this.grainTex.repeat.set(14, 14);
+    }
+    const mat = new THREE.MeshStandardMaterial({
+      map: this.paperTex, roughness: 0.95, metalness: 0, envMapIntensity: LIGHT.env,
+      ...(detailed ? { bumpMap: this.grainTex, bumpScale: 0.6 } : {}),
+    });
     this.paper = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), mat);
     this.paper.rotation.x = -Math.PI / 2;
     this.paper.position.y = -FRAMING.tokenHeight / 2 - 0.01;
@@ -223,6 +434,63 @@ export class BoardRenderer {
     this.scene.background = new THREE.Color(this.theme.sky);
     this.fill.color.set(this.theme.paper);
     this.fill.groundColor.set(this.theme.rule);
+    this.buildSlots();
+  }
+
+  // Pencil slot outlines under every cell (detailed) and soft blob shadows
+  // that ground tokens when the shadow map is off. One draw call each.
+  buildSlots() {
+    if (this.slots) {
+      this.scene.remove(this.slots);
+      this.slots.material.map?.dispose();
+      this.slots.material.dispose();
+      this.slots.geometry.dispose();
+    }
+    this.slots = new THREE.InstancedMesh(
+      new THREE.PlaneGeometry(0.94, 0.94),
+      new THREE.MeshStandardMaterial({
+        map: makeSlotTexture(this.theme), transparent: true, depthWrite: false,
+        roughness: 1, metalness: 0, envMapIntensity: LIGHT.env,
+      }),
+      512,
+    );
+    this.slots.count = 0;
+    this.slots.receiveShadow = true;
+    this.slots.visible = this.q.detail === 'detailed';
+    this.slots.layers.set(LAYER_ENV);
+    this.slotKey = null;
+    this.scene.add(this.slots);
+    if (!this.blobs) {
+      this.blobs = new THREE.InstancedMesh(
+        new THREE.PlaneGeometry(1.05, 1.05),
+        new THREE.MeshBasicMaterial({
+          map: this.spriteTex, color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false,
+        }),
+        512,
+      );
+      this.blobs.count = 0;
+      this.blobs.layers.set(LAYER_ENV);
+      this.blobs.frustumCulled = false;
+      this.scene.add(this.blobs);
+    }
+    if (this.state) this.updateSlots();
+  }
+
+  updateSlots() {
+    if (!this.slots || !this.state) return;
+    const key = `${this.state.cols}:${this.state.cells.length}`;
+    if (key === this.slotKey) return;
+    this.slotKey = key;
+    const m = new THREE.Matrix4();
+    const n = Math.min(512, this.state.cells.length);
+    for (let i = 0; i < n; i++) {
+      const p = this.cellToWorld(i);
+      m.makeRotationX(-Math.PI / 2);
+      m.setPosition(p.x, -FRAMING.tokenHeight / 2 - 0.006, p.z);
+      this.slots.setMatrixAt(i, m);
+    }
+    this.slots.count = n;
+    this.slots.instanceMatrix.needsUpdate = true;
   }
 
   buildMarkers() {
@@ -251,43 +519,115 @@ export class BoardRenderer {
     this.scene.add(this.pathDots);
   }
 
-  buildParticles(cap) {
+  // Marker/effect colours; pushed above 1.0 when bloom is on so only they glow.
+  applyMarkerColors() {
+    const bloom = this.q.bloom === 'on';
+    this.ring.material.color.set(this.theme.select).multiplyScalar(UNLIT * (bloom ? 1.6 : 1));
+    this.pathLine.material.color.set(this.theme.legal).multiplyScalar(UNLIT);
+    this.pathDots.material.color.set(this.theme.legal).multiplyScalar(UNLIT);
+    // Sparks are pushed past the bloom threshold so they glow.
+    if (this.points) this.points.material.color.set(this.theme.accent).multiplyScalar(bloom ? 3 : UNLIT);
+  }
+
+  buildParticles() {
+    const cap = PARTICLE_CAP[this.q.particles] || PARTICLE_CAP.low;
     if (this.points) {
       this.points.geometry.dispose();
+      this.points.material.dispose();
       this.scene.remove(this.points);
     }
+    this.builtParticles = this.q.particles;
     this.particleCap = cap;
     this.particleData = new Float32Array(cap * 8); // x,y,z,vx,vy,vz,life,size
     this.particleAlive = 0;
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(cap * 3), 3));
     this.points = new THREE.Points(geo, new THREE.PointsMaterial({
-      color: this.theme.accent, size: 0.09, transparent: true, opacity: 0.9,
+      // Orthographic camera: point size is in CSS pixels (no attenuation).
+      color: this.theme.accent, size: this.q.particles === 'high' ? 11 : 8,
+      map: this.spriteTex, transparent: true, opacity: 0.95,
       sizeAttenuation: true, depthWrite: false,
     }));
     this.points.frustumCulled = false;
     this.points.layers.set(LAYER_ENV); // cosmetic particles never intercept raycasts
     this.scene.add(this.points);
+    this.applyMarkerColors();
+  }
+
+  // Ambient dust motes drifting in the desk-lamp light (background: animated).
+  buildMotes() {
+    if (this.motes) {
+      this.motes.geometry.dispose();
+      this.motes.material.dispose();
+      this.scene.remove(this.motes);
+    }
+    const n = MOTE_COUNT[this.q.particles] || MOTE_COUNT.low;
+    const pos = new Float32Array(n * 3);
+    this.moteSeed = new Float32Array(n * 4);
+    let s = 97531;
+    const rnd = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
+    for (let i = 0; i < n; i++) {
+      this.moteSeed[i * 4] = (rnd() - 0.5) * 16;
+      this.moteSeed[i * 4 + 1] = 0.4 + rnd() * 2.6;
+      this.moteSeed[i * 4 + 2] = (rnd() - 0.5) * 14;
+      this.moteSeed[i * 4 + 3] = rnd() * Math.PI * 2;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    this.motes = new THREE.Points(geo, new THREE.PointsMaterial({
+      color: new THREE.Color(0xfff3d6).multiplyScalar(UNLIT * 1.2), size: 3, map: this.spriteTex, transparent: true, opacity: 0.28,
+      sizeAttenuation: true, depthWrite: false,
+    }));
+    this.motes.frustumCulled = false;
+    this.motes.layers.set(LAYER_ENV);
+    this.builtMotes = this.q.particles;
+    this.scene.add(this.motes);
+    this.updateMotes(0);
+  }
+
+  updateMotes() {
+    const on = this.q.background === 'animated' && !this.reducedMotion && !this.osReducedMotion;
+    this.motes.visible = on;
+    if (!on) return;
+    const t = this.animTime;
+    const d = this.moteSeed;
+    const pos = this.motes.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const ph = d[i * 4 + 3];
+      pos.setXYZ(i,
+        d[i * 4] + Math.sin(t * 0.11 + ph) * 1.2,
+        d[i * 4 + 1] + Math.sin(t * 0.23 + ph * 1.7) * 0.35,
+        d[i * 4 + 2] + Math.cos(t * 0.09 + ph) * 1.0);
+    }
+    pos.needsUpdate = true;
   }
 
   rebuildDigitTextures() {
-    for (const t of this.digitTextures) t.dispose();
-    this.digitTextures = [];
-    this.tokenMaterials = [];
-    for (let d = 1; d <= 9; d++) {
-      const tex = makeDigitTexture(this.theme, d);
-      this.digitTextures.push(tex);
-      this.tokenMaterials[d] = new THREE.MeshStandardMaterial({
-        map: tex, roughness: 0.55, metalness: 0.05,
-        emissive: new THREE.Color(this.theme.select), emissiveIntensity: 0,
-      });
-    }
+    for (const t of this.digitTextures) t?.dispose();
+    this.digitTextures = [null];
+    for (let d = 1; d <= 9; d++) this.digitTextures.push(makeDigitTexture(this.theme, d));
+  }
+
+  // Each token owns its material (sharing the digit texture), so selection
+  // and legal-target glows never leak to other tokens with the same digit.
+  makeTokenMaterial(digit) {
+    const map = this.digitTextures[digit] || this.digitTextures[1];
+    const common = {
+      map, metalness: 0, envMapIntensity: LIGHT.env,
+      emissive: new THREE.Color(this.theme.select), emissiveIntensity: 0,
+    };
+    return this.q.detail === 'detailed'
+      ? new THREE.MeshPhysicalMaterial({ ...common, roughness: 0.48, clearcoat: 0.65, clearcoatRoughness: 0.28 })
+      : new THREE.MeshStandardMaterial({ ...common, roughness: 0.55, metalness: 0.05 });
   }
 
   rebuildGpuResources() {
     // Context recovery: rebuild GPU resources from retained CPU descriptors.
     this.rebuildDigitTextures();
+    this.buildImageLighting();
     this.buildEnvironment();
+    for (const view of this.tokens.values()) view.mesh.material.map = this.digitTextures[view.digit];
+    this.postKey = null;
     if (this.state) this.syncState(this.state, this.selection, true);
   }
 
@@ -295,23 +635,164 @@ export class BoardRenderer {
     this.theme = getTheme(themeId);
     this.rebuildDigitTextures();
     this.buildEnvironment();
-    this.ring.material.color.set(this.theme.select);
-    this.pathLine.material.color.set(this.theme.legal);
-    this.pathDots.material.color.set(this.theme.legal);
-    this.points.material.color.set(this.theme.accent);
+    this.applyMarkerColors();
     for (const view of this.tokens.values()) {
-      view.mesh.material = this.tokenMaterials[view.digit] || this.tokenMaterials[1];
+      view.mesh.material.map = this.digitTextures[view.digit] || this.digitTextures[1];
+    }
+    this.updateLegalHighlights();
+  }
+
+  // --- graphics settings -------------------------------------------------------
+
+  /** Apply saved graphics settings live (no reload). */
+  setGraphics(saved) {
+    this.gfxSaved = saved || {};
+    const g = resolve(this.gfxSaved, this.detected);
+    this.q = g;
+    const size = SHADOW_MAP[g.shadows];
+    const on = size > 0;
+    const shadowChanged = this.renderer.shadowMap.enabled !== on;
+    this.renderer.shadowMap.enabled = on;
+    this.keyLight.castShadow = on;
+    if (on && this.keyLight.shadow.mapSize.x !== size) {
+      this.keyLight.shadow.mapSize.set(size, size);
+      this.keyLight.shadow.map?.dispose();
+      this.keyLight.shadow.map = null;
+    }
+    for (const view of this.tokens.values()) view.mesh.castShadow = on;
+    if (this.builtDetail !== g.detail) {
+      this.builtDetail = g.detail;
+      const old = this.tokenGeo;
+      this.tokenGeo = makeTokenGeometry(g.detail === 'detailed');
+      for (const view of this.tokens.values()) {
+        const em = view.mesh.material.emissive.clone();
+        const ei = view.mesh.material.emissiveIntensity;
+        view.mesh.material.dispose();
+        view.mesh.geometry = this.tokenGeo;
+        view.mesh.material = this.makeTokenMaterial(view.digit);
+        view.mesh.material.emissive.copy(em);
+        view.mesh.material.emissiveIntensity = ei;
+      }
+      old?.dispose();
+      this.buildEnvironment();
+    } else if (shadowChanged) {
+      // Materials pick up shadow-map changes on recompile.
+      for (const view of this.tokens.values()) view.mesh.material.needsUpdate = true;
+      this.paper.material.needsUpdate = true;
+      this.slots.material.needsUpdate = true;
+    }
+    if (this.builtParticles !== g.particles) this.buildParticles();
+    if (this.builtMotes !== g.particles) this.buildMotes();
+    this.applyMarkerColors();
+    this.slots.visible = g.detail === 'detailed';
+    this.adaptiveScale = 1;
+    this._frames = [];
+    this.postKey = null; // rebuild the post chain on the next frame
+    this.postFailed = false;
+    this.fpsVisible(g.showFps);
+    this.renderer.domElement.dataset.gfxPreset = g.preset;
+  }
+
+  /** What the settings panel shows: GPU, auto choice, resolved tiers, cost, frame rate. */
+  graphicsInfo(labels) {
+    const w = this.size[0] || this.container.clientWidth || 1;
+    const h = this.size[1] || this.container.clientHeight || 1;
+    const pr = this.pixelRatio || this.currentRatio();
+    const px = [Math.round(w * pr), Math.round(h * pr)];
+    return {
+      gpu: this.gpu || '',
+      detected: this.detected,
+      resolved: this.q,
+      summary: describe(this.q, px, labels),
+      fps: Math.round(this.fps || 0),
+      adaptiveScale: Math.round(this.adaptiveScale * 100) / 100,
+      postFailed: !!this.postFailed,
+    };
+  }
+
+  fpsVisible(on) {
+    if (typeof document === 'undefined') return;
+    let el = document.getElementById('fps-meter');
+    if (on && !el) {
+      el = document.createElement('div');
+      el.id = 'fps-meter';
+      el.className = 'fps-meter';
+      el.setAttribute('aria-hidden', 'true');
+      el.textContent = '… fps';
+      document.body.append(el);
+    }
+    if (el) el.hidden = !on;
+  }
+
+  currentRatio() {
+    const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+    return Math.min(dpr, this.q.dprCap) * this.q.scale * this.adaptiveScale;
+  }
+
+  postKeyFor(w, h) {
+    const g = this.q;
+    return g.post ? [g.ao, g.bloom, g.grade, g.antialias, w, h, this.pixelRatio].join('|') : 'none';
+  }
+
+  buildPost(w, h) {
+    const g = this.q;
+    this.composer?.dispose();
+    this.composer = null;
+    if (!g.post) return;
+    try {
+      const pw = Math.max(1, Math.round(w * this.pixelRatio));
+      const ph = Math.max(1, Math.round(h * this.pixelRatio));
+      const target = new THREE.WebGLRenderTarget(pw, ph, {
+        type: THREE.HalfFloatType, samples: g.antialias === 'msaa' ? 4 : 0,
+      });
+      const composer = new EffectComposer(this.renderer, target);
+      composer.setPixelRatio(this.pixelRatio);
+      composer.setSize(w, h);
+      composer.addPass(new RenderPass(this.scene, this.camera));
+      if (g.ao !== 'off') {
+        const ao = new GTAOPass(this.scene, this.camera, pw, ph);
+        // r160 sets this define under a typo'd name: fix it for the ortho camera.
+        ao.gtaoMaterial.defines.PERSPECTIVE_CAMERA = this.camera.isPerspectiveCamera ? 1 : 0;
+        ao.gtaoMaterial.needsUpdate = true;
+        ao.output = GTAOPass.OUTPUT.Default;
+        ao.blendIntensity = g.ao === 'high' ? 0.85 : 0.7;
+        ao.updateGtaoMaterial({ radius: 0.45, distanceExponent: 1.6, thickness: 1.2, scale: 1.0, samples: g.ao === 'high' ? 16 : 8 });
+        ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: g.ao === 'high' ? 6 : 4, rings: 2, samples: g.ao === 'high' ? 16 : 8 });
+        composer.addPass(ao);
+      }
+      if (g.bloom === 'on') {
+        // High threshold: only the selection marker, sparks and hot highlights bloom.
+        composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.5, 0.4, 0.9));
+      }
+      composer.addPass(new OutputPass());
+      if (g.grade === 'on') composer.addPass(new ShaderPass(GradeShader));
+      if (g.antialias === 'smaa') composer.addPass(new SMAAPass(pw, ph));
+      if (g.antialias === 'fxaa') {
+        const fxaa = new ShaderPass(FXAAShader);
+        fxaa.material.uniforms.resolution.value.set(1 / pw, 1 / ph);
+        composer.addPass(fxaa);
+      }
+      this.composer = composer;
+    } catch {
+      // Post-processing is an enhancement: render directly (the settings panel says so).
+      this.postFailed = true;
+      this.composer = null;
     }
   }
 
-  setQuality(tierName) {
-    this.tierName = tierName in QUALITY_TIERS ? tierName : 'medium';
-    const tier = QUALITY_TIERS[this.tierName];
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, tier.pixelRatio));
-    this.keyLight.castShadow = tier.shadows;
-    this.renderer.shadowMap.enabled = tier.shadows;
-    this.buildParticles(tier.particleCap);
-    this.resize();
+  // Adaptive resolution: step the render scale down when frames are slow, back up when fast.
+  adapt(dtMs) {
+    const f = this._frames;
+    f.push(dtMs);
+    if (f.length < 90) return;
+    const avg = f.reduce((a, b) => a + b, 0) / f.length;
+    f.length = 0;
+    this.fps = 1000 / avg;
+    const el = typeof document !== 'undefined' && document.getElementById('fps-meter');
+    if (el && !el.hidden) el.textContent = `${Math.round(this.fps)} fps · ${Math.round(this.pixelRatio * 100) / 100}×`;
+    if (!this.q.adaptive) { this.adaptiveScale = 1; return; }
+    if (avg > 26) this.adaptiveScale = Math.max(0.6, this.adaptiveScale - 0.1);
+    else if (avg < 14 && this.adaptiveScale < 1) this.adaptiveScale = Math.min(1, this.adaptiveScale + 0.05);
   }
 
   setReducedMotion(on) {
@@ -337,7 +818,10 @@ export class BoardRenderer {
   resize() {
     const w = this.container.clientWidth || 1;
     const h = this.container.clientHeight || 1;
+    this.pixelRatio = this.currentRatio();
+    this.renderer.setPixelRatio(this.pixelRatio);
     this.renderer.setSize(w, h);
+    this.size = [w, h];
     this.fitCamera(w / h);
     // HUD chrome appears/disappears without a resize: refit when it does.
     if (!this._hudObserver && typeof MutationObserver === 'function' && typeof document !== 'undefined') {
@@ -397,6 +881,13 @@ export class BoardRenderer {
     this.camera.position.set(0, Math.cos(tilt) * d, Math.sin(tilt) * d);
     this.camera.lookAt(0, 0, 0.4);
     this.camera.updateProjectionMatrix();
+    // Shadow frustum fitted tightly around the board (plus lift headroom).
+    const sc = this.keyLight.shadow.camera;
+    const ext = Math.max(halfW, halfH) + 0.6;
+    if (sc.right !== ext) {
+      Object.assign(sc, { left: -ext, right: ext, top: ext, bottom: -ext, near: 1, far: 30 });
+      sc.updateProjectionMatrix();
+    }
   }
 
   // --- state sync ---------------------------------------------------------------
@@ -426,7 +917,7 @@ export class BoardRenderer {
         if (view.dying) { view.dying = false; view.targetScale = 1; }
         if (view.digit !== digit) {
           view.digit = digit;
-          view.mesh.material = this.tokenMaterials[digit];
+          view.mesh.material.map = this.digitTextures[digit];
         }
       }
       view.target = this.cellToWorld(i);
@@ -440,13 +931,14 @@ export class BoardRenderer {
         else this.killToken(view);
       }
     }
+    this.updateSlots();
     this.updateLegalHighlights();
     this.updateSelectionVisuals();
   }
 
   spawnToken(index, digit) {
-    const mesh = new THREE.Mesh(this.tokenGeo, this.tokenMaterials[digit]);
-    mesh.castShadow = QUALITY_TIERS[this.tierName].shadows;
+    const mesh = new THREE.Mesh(this.tokenGeo, this.makeTokenMaterial(digit));
+    mesh.castShadow = this.renderer.shadowMap.enabled;
     mesh.layers.set(LAYER_PICK);
     mesh.userData.cell = index;
     const pos = this.cellToWorld(index);
@@ -455,7 +947,7 @@ export class BoardRenderer {
     const view = {
       mesh, digit, index, target: pos.clone(),
       vel: new THREE.Vector3(), scaleV: 0, scale: 1, targetScale: 1,
-      dying: false, lift: 0, pulse: 0,
+      dying: false, lift: 0, pulse: 0, phase: index * 0.73,
     };
     this.tokens.set(index, view);
     return view;
@@ -473,11 +965,13 @@ export class BoardRenderer {
     const view = this.tokens.get(index);
     if (!view) return;
     this.tokenGroup.remove(view.mesh);
+    view.mesh.material.dispose();
     this.tokens.delete(index);
   }
 
   spawnBurst(pos, n) {
     if (this.reducedMotion) return;
+    if (this.q.particles === 'high') n = Math.round(n * 1.6);
     for (let k = 0; k < n && this.particleAlive < this.particleCap; k++) {
       const i = this.particleAlive++;
       const d = this.particleData;
@@ -537,7 +1031,7 @@ export class BoardRenderer {
       const mat = view.mesh.material;
       // Selection: lift + emissive rim; legal targets: soft legal tint.
       view.liftTarget = isSel ? 0.32 : isLegal ? 0.12 : 0;
-      if (isSel) { mat.emissive.set(this.theme.select); view.emissiveTarget = 0.45; }
+      if (isSel) { mat.emissive.set(this.theme.select); view.emissiveTarget = 0.32; }
       else if (isLegal) { mat.emissive.set(this.theme.legal); view.emissiveTarget = 0.22; }
       else view.emissiveTarget = 0;
     }
@@ -615,7 +1109,7 @@ export class BoardRenderer {
   start() {
     if (this.running) return;
     this.running = true;
-    this.clock.start();
+    this._last = 0;
     this.renderer.setAnimationLoop(() => this.frame());
   }
 
@@ -626,19 +1120,60 @@ export class BoardRenderer {
 
   frame() {
     if (this.contextLost) return;
-    const dt = Math.min(0.05, this.clock.getDelta());
+    const now = performance.now();
+    const dtMs = this._last ? Math.min(250, now - this._last) : 16;
+    this._last = now;
+    const dt = Math.min(0.05, dtMs / 1000);
     this.animTime += dt;
     this.updateTokens(dt);
     this.updateParticles(dt);
     this.updateCameraShake(dt);
-    this.renderer.render(this.scene, this.camera);
+    this.updateAmbient();
+    this.renderFrame(dtMs);
+  }
+
+  // Gentle desk-lamp shimmer + drifting motes; frozen by reduced motion.
+  updateAmbient() {
+    const animated = this.q.background === 'animated' && !this.reducedMotion && !this.osReducedMotion;
+    const t = this.animTime;
+    this.keyLight.intensity = LIGHT.key * (animated ? 1 + 0.025 * Math.sin(t * 0.7) + 0.012 * Math.sin(t * 1.9) : 1);
+    this.keyLight.position.x = 4 + (animated ? Math.sin(t * 0.13) * 0.35 : 0);
+    this.updateMotes();
+  }
+
+  renderFrame(dtMs) {
+    this.adapt(dtMs);
+    const w = this.container.clientWidth || 1;
+    const h = this.container.clientHeight || 1;
+    const ratio = this.currentRatio();
+    if (w !== this.size[0] || h !== this.size[1] || ratio !== this.pixelRatio) {
+      const sizeChanged = w !== this.size[0] || h !== this.size[1];
+      this.size = [w, h];
+      this.pixelRatio = ratio;
+      this.renderer.setPixelRatio(ratio);
+      this.renderer.setSize(w, h);
+      if (sizeChanged) this.fitCamera(w / h);
+    }
+    const key = this.postKeyFor(w, h);
+    if (key !== this.postKey) {
+      this.postKey = key;
+      this.buildPost(w, h);
+    }
+    if (this.composer) this.composer.render(dtMs / 1000);
+    else this.renderer.render(this.scene, this.camera);
   }
 
   updateTokens(dt) {
     const smooth = this.reducedMotion ? 0.02 : 0.14;
+    const bob = this.q.background === 'animated' && !this.reducedMotion && !this.osReducedMotion;
+    const blobs = !this.renderer.shadowMap.enabled;
+    const bm = this._blobMatrix || (this._blobMatrix = new THREE.Matrix4());
+    this._blobScale = this._blobScale || new THREE.Vector3();
+    let nb = 0;
     for (const [i, view] of this.tokens) {
       const m = view.mesh;
-      const ty = (view.target?.y ?? 0) + (view.liftTarget || 0);
+      const idle = bob && !view.dying ? 0.012 * Math.sin(this.animTime * 1.7 + view.phase) : 0;
+      const ty = (view.target?.y ?? 0) + (view.liftTarget || 0) + idle;
       let v;
       [m.position.x, v] = spring(m.position.x, view.target.x, view.vel.x, smooth, dt); view.vel.x = v;
       [m.position.y, v] = spring(m.position.y, ty, view.vel.y, smooth, dt); view.vel.y = v;
@@ -650,12 +1185,25 @@ export class BoardRenderer {
       const targetE = view.pulse > 0
         ? 0.35 + 0.3 * Math.sin(this.animTime * 10)
         : (view.emissiveTarget || 0);
-      mat.emissiveIntensity += (targetE - ei) * Math.min(1, dt * 12);
+      mat.emissiveIntensity += (targetE * UNLIT - ei) * Math.min(1, dt * 12);
       if (view.pulse > 0) {
         view.pulse -= dt;
         if (view.pulse <= 0) mat.emissive.set(this.theme.select);
       }
+      if (blobs && nb < 512) {
+        // Soft contact shadow: smaller and fainter as the token lifts.
+        const k = Math.max(0.01, view.scale) * (1 - Math.min(0.35, m.position.y * 0.8));
+        bm.makeRotationX(-Math.PI / 2);
+        bm.scale(this._blobScale.set(k, k, 1));
+        bm.setPosition(m.position.x + 0.05, -FRAMING.tokenHeight / 2 - 0.004, m.position.z + 0.06);
+        this.blobs.setMatrixAt(nb++, bm);
+      }
       if (view.dying && view.scale < 0.05) this.releaseToken(i);
+    }
+    if (this.blobs) {
+      this.blobs.count = nb;
+      this.blobs.visible = blobs;
+      if (nb) this.blobs.instanceMatrix.needsUpdate = true;
     }
     if (this.ring.visible) {
       const s = 1 + 0.06 * Math.sin(this.animTime * 5);
@@ -722,11 +1270,16 @@ export class BoardRenderer {
   dispose() {
     this.stop();
     this.disposed = true;
-    for (const t of this.digitTextures) t.dispose();
+    for (const t of this.digitTextures) t?.dispose();
     this.paperTex?.dispose();
+    this.grainTex?.dispose();
+    this.spriteTex?.dispose();
+    this.envTex?.dispose();
     this.tokenGeo?.dispose();
-    for (const m of this.tokenMaterials || []) m?.dispose();
+    for (const view of this.tokens.values()) view.mesh.material.dispose();
     this.points?.geometry.dispose();
+    this.motes?.geometry.dispose();
+    this.composer?.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }

@@ -303,7 +303,7 @@ kbd {
 }
 
 /* settings */
-.settings-body { width: min(560px, 94vw); text-align: left; display: grid; gap: 4px; }
+.settings-body { width: min(560px, 100%); text-align: left; display: grid; gap: 4px; }
 .set-row {
   display: flex; align-items: center; justify-content: space-between; gap: 14px;
   padding: 10px 0; border-bottom: 1px dashed var(--rule); min-height: 44px;
@@ -315,6 +315,74 @@ kbd {
   border: 2px solid var(--rule); border-radius: 8px; padding: 6px 10px; min-height: 40px;
 }
 .set-group { margin: 18px 0 4px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.6; }
+
+/* graphics settings */
+.gfx-section { display: grid; gap: 4px; }
+.gfx-row { flex-wrap: wrap; row-gap: 6px; }
+.gfx-row label { flex: 1 1 8em; }
+.gfx-row select { max-width: 100%; margin-left: auto; }
+.gfx-scale-wrap { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.set-row .gfx-scale-wrap input[type="range"] { width: clamp(96px, 30vw, 160px); }
+.gfx-scale-value { min-width: 3.2em; text-align: right; font-variant-numeric: tabular-nums; }
+.gfx-summary { font-size: 0.85rem; opacity: 0.8; margin: 8px 0 0; overflow-wrap: anywhere; }
+.gfx-note { font-size: 0.85rem; color: #a33; margin: 4px 0 0; }
+.gfx-note[hidden] { display: none; }
+
+/* frame-rate readout: bottom-left, never over HUD controls */
+.fps-meter {
+  position: fixed; left: calc(8px + var(--sal)); bottom: calc(8px + var(--sab)); z-index: 95;
+  pointer-events: none; font: 12px/1.3 ui-monospace, monospace;
+  background: rgba(0, 0, 0, 0.62); color: #fff; padding: 2px 7px; border-radius: 5px;
+}
+.fps-meter[hidden] { display: none; }
+@media (max-width: 700px) and (orientation: portrait) {
+  .fps-meter { bottom: calc(84px + var(--sab)); }
+}
+
+/* title: two decorative pairs of number tiles */
+.title-tiles { display: flex; gap: 28px; margin: 0 0 22px; }
+.tile-pair { display: flex; gap: 10px; position: relative; }
+.tile-pair::after {
+  content: ''; position: absolute; left: 24px; right: 24px; top: -12px; height: 14px;
+  border: 2px dashed var(--accent); border-bottom: none; border-radius: 14px 14px 0 0; opacity: 0.7;
+}
+.tile {
+  width: 48px; height: 48px; display: grid; place-items: center;
+  font-family: var(--serif); font-weight: 700; font-size: 1.6rem; color: var(--ink);
+  background: var(--panel); border: 2px solid var(--rule); border-radius: 10px;
+}
+@media (max-height: 500px) { .title-tiles { display: none; } }
+
+/* Surface detail (Graphics → Surface detail: Detailed): notebook paper
+   screens and lacquered title tiles. Off in high contrast. */
+body[data-gfx-detail="detailed"]:not(.high-contrast) .screen {
+  background-image:
+    radial-gradient(ellipse at 50% 38%, transparent 55%, rgba(60, 40, 10, 0.07) 100%),
+    repeating-linear-gradient(180deg, transparent 0 31px, color-mix(in srgb, var(--rule) 42%, transparent) 31px 32px);
+  background-attachment: local;
+}
+@media (min-width: 760px) {
+  body[data-gfx-detail="detailed"]:not(.high-contrast) .screen {
+    background-image:
+      radial-gradient(ellipse at 50% 38%, transparent 55%, rgba(60, 40, 10, 0.07) 100%),
+      linear-gradient(90deg, transparent 63px, color-mix(in srgb, #d98f8f 60%, transparent) 63px 65px, transparent 65px),
+      repeating-linear-gradient(180deg, transparent 0 31px, color-mix(in srgb, var(--rule) 42%, transparent) 31px 32px);
+  }
+}
+body[data-gfx-detail="detailed"]:not(.high-contrast) .tile {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 70%, white) 0%, var(--panel) 55%, color-mix(in srgb, var(--panel) 90%, black) 100%);
+  border-color: color-mix(in srgb, var(--rule) 85%, black);
+  box-shadow: 0 3px 0 color-mix(in srgb, var(--rule) 80%, black), 0 10px 16px rgba(40, 30, 10, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+body[data-gfx-detail="detailed"]:not(.high-contrast):not([data-theme="dusk"]) .screen-title h1 {
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7), 0 3px 10px rgba(40, 30, 10, 0.12);
+}
+body[data-gfx-background="animated"]:not(.reduced-motion) .tile { animation: tile-bob 3.4s ease-in-out infinite; }
+body[data-gfx-background="animated"]:not(.reduced-motion) .tile-pair .tile:nth-child(2) { animation-delay: -0.8s; }
+body[data-gfx-background="animated"]:not(.reduced-motion) .tile-pair + .tile-pair .tile:nth-child(1) { animation-delay: -1.7s; }
+body[data-gfx-background="animated"]:not(.reduced-motion) .tile-pair + .tile-pair .tile:nth-child(2) { animation-delay: -2.5s; }
+@keyframes tile-bob { 50% { transform: translateY(-4px); } }
+@media (prefers-reduced-motion: reduce) { .tile { animation: none !important; } }
 
 /* boards */
 #boards-body { width: min(640px, 94vw); text-align: left; }

@@ -11,6 +11,7 @@ import {
   PRACTICE_DIFFICULTIES,
 } from './content.js';
 import { listLegalPairs, remainingCount } from './rules.js';
+import { resolve as resolveGraphics } from './gfx.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -44,6 +45,7 @@ async function boot() {
   wireInput();
   initRenderer();
   ui.applySettingsClasses(platform.settings);
+  applyGraphicsBody();
   platform.onSyncChange = () => { ui.updateSyncNote(); };
   ui.updateProfileChip();
   ui.updateSyncNote();
@@ -73,9 +75,10 @@ function initRenderer() {
       try {
         renderer = new BoardRenderer($('canvas-host'), {
           themeId: platform.settings.theme,
-          quality: platform.settings.quality,
+          graphics: platform.settings.graphics || {},
           emit: onRendererEvent,
         });
+        applyGraphicsBody();
         renderer.setReducedMotion(platform.settings.reducedMotion);
         renderer.start();
         wireCanvasInput();
@@ -242,6 +245,7 @@ function wireUI() {
   $('btn-journey').onclick = () => { audio.uiClick(); openMode('journey'); };
   $('btn-boards').onclick = () => { audio.uiClick(); ui.renderBoards(); ui.showScreen('boards'); };
   $('btn-achievements').onclick = () => { audio.uiClick(); ui.renderAchievements(platform.progress); ui.showScreen('achievements'); };
+  $('btn-title-settings').onclick = () => { audio.uiClick(); openSettings(); };
   $('btn-help').onclick = () => { audio.uiClick(); pauseForScreen(); ui.renderHelp(platform.settings.bindings); ui.showScreen('help'); };
   $('btn-settings').onclick = () => { audio.uiClick(); pauseForScreen(); openSettings(); };
   $('btn-profile').onclick = () => { audio.uiClick(); pauseForScreen(); ui.renderProfile(); ui.showScreen('profile'); };
@@ -568,8 +572,31 @@ function pauseForScreen() {
 }
 
 function openSettings() {
-  ui.renderSettings(platform.settings, onSettingChange);
+  ui.renderSettings(platform.settings, onSettingChange, graphicsApi);
   ui.showScreen('settings');
+}
+
+// Graphics settings (quality model in gfx.js): stored with the other
+// settings under `graphics`, applied live to the renderer and to the DOM.
+const graphicsApi = {
+  saved: () => platform.settings.graphics || {},
+  detected: () => renderer?.detected || 'low',
+  info: (labels) => (renderer && !webglFailed ? renderer.graphicsInfo(labels) : null),
+  set(next) {
+    platform.settings.graphics = next;
+    platform.saveSettings();
+    platform.track('settings-change', { key: 'graphics' });
+    renderer?.setGraphics(next);
+    applyGraphicsBody();
+  },
+};
+
+function applyGraphicsBody() {
+  const g = renderer?.q || resolveGraphics(platform.settings.graphics || {}, 'low');
+  const b = document.body.dataset;
+  b.gfxPreset = g.preset;
+  b.gfxDetail = g.detail;
+  b.gfxBackground = g.background;
 }
 
 function onSettingChange(key, value) {
@@ -586,7 +613,6 @@ function onSettingChange(key, value) {
   ui.applySettingsClasses(s);
   audio.applyVolumes();
   if (key === 'theme' && renderer) renderer.setTheme(value);
-  if (key === 'quality' && renderer) renderer.setQuality(value);
   if (key === 'reducedMotion' && renderer) renderer.setReducedMotion(value);
   if (key === 'telemetryConsent') ui.toast(value ? 'Anonymous stats on. Thank you!' : 'Anonymous stats off.');
 }

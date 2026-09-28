@@ -7,6 +7,10 @@
 <meta name="color-scheme" content="light">
 <title>Pair Sum</title>
 <link rel="stylesheet" href="css/style.css">
+<!-- three.js addons (vendored from the same r160 release) import the bare specifier "three" -->
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/three/addons/" } }
+</script>
 </head>
 <body data-theme="notebook">
 <a class="skip-link" href="#board-mirror">Skip to board</a>
@@ -88,6 +92,10 @@
 <div id="screens" class="screens">
 
   <section id="screen-title" class="screen screen-title" aria-labelledby="title-h">
+    <div class="title-tiles" aria-hidden="true">
+      <span class="tile-pair"><span class="tile">3</span><span class="tile">7</span></span>
+      <span class="tile-pair"><span class="tile">5</span><span class="tile">5</span></span>
+    </div>
     <h1 id="title-h">Pair Sum</h1>
     <p class="tagline">Connect equal numbers — or pairs that make ten — along open paths.</p>
     <div class="title-actions">
@@ -99,6 +107,7 @@
       <button id="btn-journey" type="button" class="link-btn">🗺️ Journey <span id="journey-status"></span></button>
       <button id="btn-boards" type="button" class="link-btn">🏆 Scores</button>
       <button id="btn-achievements" type="button" class="link-btn">🎖️ Achievements</button>
+      <button id="btn-title-settings" type="button" class="link-btn">⚙️ Settings</button>
     </div>
   </section>
 

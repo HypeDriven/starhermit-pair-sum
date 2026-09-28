@@ -5,6 +5,7 @@
 
 import { ACHIEVEMENTS, THEMES, JOURNEY, PRACTICE_DIFFICULTIES, CHALLENGES, getTheme } from './content.js';
 import { remainingCount } from './rules.js';
+import { renderGraphicsSection } from './gfxui.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -421,7 +422,7 @@ export class UI {
 
   // --- settings -------------------------------------------------------------------------
 
-  renderSettings(s, onChange) {
+  renderSettings(s, onChange, gfxApi) {
     const body = $('settings-body');
     body.innerHTML = '';
     const row = (label, control) => h('div', { class: 'set-row' }, h('label', { text: label }), control);
@@ -452,9 +453,8 @@ export class UI {
       row('Ambience', slider('volAmbience')),
       row('Voice cues', slider('volVoice')),
       row('Captions for sounds', check('captions')),
-      group('Graphics'),
+      group('Display'),
       row('Theme', select('theme', THEMES.map((t) => [t.id, t.name]))),
-      row('Quality tier', select('quality', [['low', 'Low (30 fps target)'], ['medium', 'Medium'], ['high', 'High (60 fps target)']])),
       row('Reduced motion', check('reducedMotion')),
       row('High contrast', check('highContrast')),
       row('Color palette', select('palette', [['default', 'Default'], ['deuteranopia', 'Deuteranopia-safe'], ['protanopia', 'Protanopia-safe'], ['tritanopia', 'Tritanopia-safe']])),
@@ -470,6 +470,13 @@ export class UI {
         h('label', { text: 'Tutorial' }),
         h('button', { class: 'chip', type: 'button', onclick: () => onChange('replayTutorial', true) }, 'Replay lessons')),
     );
+    if (gfxApi) {
+      const gfx = h('section', { id: 'gfx-section', class: 'gfx-section', 'data-gfx-section': '' });
+      // Graphics sits right after Display so it is easy to find.
+      const controlsGroup = [...body.querySelectorAll('.set-group')].find((g) => g.textContent === 'Controls');
+      body.insertBefore(gfx, controlsGroup || null);
+      renderGraphicsSection(gfx, gfxApi);
+    }
   }
 
   // --- achievements / boards / profile ------------------------------------------------------

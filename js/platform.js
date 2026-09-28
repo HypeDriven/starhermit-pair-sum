@@ -596,7 +596,7 @@ export function defaultSettings() {
   return {
     v: 1,
     theme: 'notebook',
-    quality: 'medium',
+    graphics: {},             // graphics quality settings (see js/gfx.js); {} = Auto
     muted: false,
     volMusic: 0.5, volEffects: 0.8, volAmbience: 0.4, volVoice: 0.8,
     captions: false,
