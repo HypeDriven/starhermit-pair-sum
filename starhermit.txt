@@ -1,4 +1,5 @@
 name=Pair Sum
+description=Connect unobstructed pairs of equal numbers or numbers that add up to the target sum to clear the board.
 launch=index.html
 owner=2712e04e-461b-4d23-81ae-e40b429128a8
 server=server.js
