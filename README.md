@@ -27,7 +27,7 @@ npm test           # rules, content validation, replay determinism, fuzz
 - `js/render.js` — Three.js scene (procedural tokens/paper, springs, pooled particles, quality tiers)
 - `js/ui.js` — DOM shell: screens, HUD, settings, accessible board mirror
 - `js/audio.js` — synthesized WebAudio buses (music/effects/ambience/voice)
-- `js/platform.js` — local-first persistence + hosted adapter (time sync, boards, cloud save, telemetry)
+- `js/platform.js` — local-first persistence + hosted adapter (local boards, cloud save; no own-server calls)
 - `js/main.js` — bootstrap, input routing (pointer/touch/keyboard/gamepad), lifecycle
 - `server.js` — zero-dependency Node host: static files, `/api/v1/*`, replay-validated leaderboards
 - `starhermit.txt` — distribution manifest (`name=Pair Sum`, `launch=index.html`, `server=server.js`)

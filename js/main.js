@@ -12,6 +12,7 @@ import {
 } from './content.js';
 import { listLegalPairs, remainingCount } from './rules.js';
 import { resolve as resolveGraphics } from './gfx.js';
+import { gfxStrings } from './gfxui.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -24,6 +25,30 @@ let lastNoteSent = 0;
 let cursorIndex = null;    // keyboard/gamepad cursor
 let gamepadState = {};
 
+// Keyboard actions by KeyboardEvent.code, mirrored as control.* lines in
+// starhermit.txt; the player's StarHermit rebinds replace these at boot.
+const KEY_DEFAULTS = {
+  left: ['ArrowLeft'], right: ['ArrowRight'], up: ['ArrowUp'], down: ['ArrowDown'],
+  choose: ['Enter', 'Space', 'NumpadEnter'], cancel: ['Escape'],
+  hint: ['KeyH'], undo: ['KeyU'], addRows: ['KeyA'], camera: ['KeyR'],
+};
+let keys = JSON.parse(JSON.stringify(KEY_DEFAULTS));
+const keyAction = (code) => Object.keys(keys).find((a) => keys[a].includes(code)) || null;
+
+// Title account buttons: sign-in only where the platform offers it (on
+// *.starhermit.com without a token), invite only when signed in.
+function refreshAccount() {
+  $('btn-sh-signin').hidden = !platform.canSignIn();
+  $('btn-sh-invite').hidden = !platform.inviteLink();
+}
+async function copyInvite() {
+  const link = platform.inviteLink();
+  if (!link) return;
+  const S = gfxStrings().sh;
+  try { await navigator.clipboard.writeText(link); ui.toast(S.copied); }
+  catch { ui.toast(S.copyFailed); }
+}
+
 // ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
@@ -33,10 +58,12 @@ async function boot() {
   platform.verifyProgress();
   // Pull cloud progression when hosted (conflict-safe merge, both kept).
   if (platform.hosted) await platform.reconcileProgress().catch(() => {});
+  // The account's preferences (settings KV) win over the local copy.
+  if (platform.hosted) await platform.loadPlatformSettings().catch(() => false);
+  keys = await platform.loadBindings(KEY_DEFAULTS);
   wireAchievements();
   ui = new UI(platform);
   audio = new AudioEngine(platform.settings, (t) => ui.caption(t));
-  platform.consent.telemetry = !!platform.settings.telemetryConsent;
 
   session = new Session(platform, onSessionEvent);
   session.onTransition = onTransition;
@@ -47,15 +74,26 @@ async function boot() {
   ui.applySettingsClasses(platform.settings);
   applyGraphicsBody();
   platform.onSyncChange = () => { ui.updateSyncNote(); };
+  platform.onProfileChange = () => ui.updateProfileChip();
+  platform.onAuth = (a) => {
+    if (!a.signedIn) ui.toast(gfxStrings().sh.signedOut);
+    ui.updateProfileChip();
+    refreshAccount();
+  };
+  const shText = gfxStrings();
+  for (const [id, key] of [['btn-sh-signin', 'signIn'], ['btn-sh-invite', 'invite']]) {
+    $(id).textContent = shText.sh[key];
+    $(id).lang = shText.locale;
+  }
+  $('btn-sh-signin').onclick = () => platform.signIn();
+  $('btn-sh-invite').onclick = () => { audio.uiClick(); copyInvite(); };
+  refreshAccount();
   ui.updateProfileChip();
   ui.updateSyncNote();
 
   session.transition('title', 'boot-complete');
   ui.renderTitle(platform.progress, dailyForDate(new Date(platform.serverNow())), session.hasSnapshot());
   ui.showScreen('title');
-  platform.track('start', { hosted: platform.hosted });
-  platform.activityStart();
-  window.addEventListener('beforeunload', () => platform.activityEnd());
 
   // First-gesture audio unlock.
   const unlock = () => { audio.ensure(); audio.applyVolumes(); };
@@ -100,7 +138,6 @@ function enterFallback(e) {
   $('webgl-fallback').hidden = false;
   ui.setMirrorVisible(true);
   console.warn('3D unavailable, DOM mirror active:', e);
-  platform.track('error', { category: 'webgl' });
 }
 
 function onRendererEvent(e) {
@@ -183,9 +220,6 @@ function onSessionEvent(e) {
       ui.toast(e.summary);
       ui.announce(e.summary);
       break;
-    case 'round-end':
-      platform.stopPresence();
-      break;
     default:
       break;
   }
@@ -212,7 +246,6 @@ function onTransition(from, to, reason) {
   if (to === 'active') {
     ui.setPlayingUI(true);
     ui.showScreen(null);
-    platform.startPresence();
   }
   if (to === 'paused') {
     ui.showPause(pauseSummary());
@@ -246,7 +279,7 @@ function wireUI() {
   $('btn-boards').onclick = () => { audio.uiClick(); ui.renderBoards(); ui.showScreen('boards'); };
   $('btn-achievements').onclick = () => { audio.uiClick(); ui.renderAchievements(platform.progress); ui.showScreen('achievements'); };
   $('btn-title-settings').onclick = () => { audio.uiClick(); openSettings(); };
-  $('btn-help').onclick = () => { audio.uiClick(); pauseForScreen(); ui.renderHelp(platform.settings.bindings); ui.showScreen('help'); };
+  $('btn-help').onclick = () => { audio.uiClick(); pauseForScreen(); ui.renderHelp(keys); ui.showScreen('help'); };
   $('btn-settings').onclick = () => { audio.uiClick(); pauseForScreen(); openSettings(); };
   $('btn-profile').onclick = () => { audio.uiClick(); pauseForScreen(); ui.renderProfile(); ui.showScreen('profile'); };
 
@@ -261,7 +294,7 @@ function wireUI() {
   $('btn-pause').onclick = () => session.pause('user');
   $('btn-resume').onclick = () => { ui.hidePause(); session.resume(); };
   $('btn-pause-settings').onclick = () => openSettings();
-  $('btn-pause-help').onclick = () => { ui.renderHelp(platform.settings.bindings); ui.showScreen('help'); };
+  $('btn-pause-help').onclick = () => { ui.renderHelp(keys); ui.showScreen('help'); };
   $('btn-restart-round').onclick = () => { ui.hidePause(); restartRound(); };
   $('btn-leave-round').onclick = () => { ui.hidePause(); leaveRound(); };
   $('btn-lesson-skip').onclick = () => {
@@ -287,7 +320,6 @@ function wireUI() {
   });
 
   window.addEventListener('error', (e) => {
-    platform.track('error', { category: 'runtime' });
     console.error(e.error || e.message);
   });
 }
@@ -314,7 +346,6 @@ function goTitle() {
 }
 
 function openMode(mode) {
-  platform.track('start', { mode });
   switch (mode) {
     case 'learn': {
       pendingSetup = { kind: 'learn' };
@@ -412,7 +443,7 @@ function openMode(mode) {
       pendingSetup = { kind: 'fixed', def };
       ui.renderSetup({
         title: def.title, def,
-        note: 'Global and friends boards use validated seeds and rulesets. Submissions carry the full replay.',
+        note: 'Shared weekly seed and ruleset. Results stay on this device; signed in, the global board is shown read-only.',
       });
       $('btn-setup-start').style.display = '';
       ui.showScreen('setup');
@@ -473,13 +504,11 @@ function startRound(def) {
 
 function restartRound() {
   if (!currentDef) return goTitle();
-  platform.track('retry', { contentId: currentDef.id });
   startRound(currentDef);
 }
 
 function leaveRound() {
   session.saveSnapshot();
-  platform.stopPresence();
   goTitle();
 }
 
@@ -585,7 +614,6 @@ const graphicsApi = {
   set(next) {
     platform.settings.graphics = next;
     platform.saveSettings();
-    platform.track('settings-change', { key: 'graphics' });
     renderer?.setGraphics(next);
     applyGraphicsBody();
   },
@@ -602,19 +630,15 @@ function applyGraphicsBody() {
 function onSettingChange(key, value) {
   const s = platform.settings;
   if (key === 'replayTutorial') {
-    platform.track('settings-change', { key });
     openMode('learn');
     return;
   }
   s[key] = value;
   platform.saveSettings();
-  platform.consent.telemetry = !!s.telemetryConsent;
-  platform.track('settings-change', { key });
   ui.applySettingsClasses(s);
   audio.applyVolumes();
   if (key === 'theme' && renderer) renderer.setTheme(value);
   if (key === 'reducedMotion' && renderer) renderer.setReducedMotion(value);
-  if (key === 'telemetryConsent') ui.toast(value ? 'Anonymous stats on. Thank you!' : 'Anonymous stats off.');
 }
 
 // ---------------------------------------------------------------------------
@@ -718,7 +742,8 @@ function wireInput() {
       (session.machine === 'active' || session.machine === 'tutorial');
     const onPlayScreen = ui.currentScreen === null;
 
-    if (e.key === 'Escape') {
+    const act = keyAction(e.code);
+    if (act === 'cancel') {
       // Escape acts as Back on any open screen; from a screen opened over a
       // paused round this returns to the pause overlay.
       if (ui.currentScreen) { back(); e.preventDefault(); return; }
@@ -776,24 +801,23 @@ function wireInput() {
       e.preventDefault();
     };
 
-    switch (e.key) {
-      case 'ArrowLeft': moveGrid(0, -1); break;
-      case 'ArrowRight': moveGrid(0, 1); break;
-      case 'ArrowUp': moveGrid(-1, 0); break;
-      case 'ArrowDown': moveGrid(1, 0); break;
-      case 'Tab': moveCursor(e.shiftKey ? -1 : 1); break;
-      case 'Enter':
-      case ' ':
+    if (e.key === 'Tab') { moveCursor(e.shiftKey ? -1 : 1); return; }
+    switch (act) {
+      case 'left': moveGrid(0, -1); break;
+      case 'right': moveGrid(0, 1); break;
+      case 'up': moveGrid(-1, 0); break;
+      case 'down': moveGrid(1, 0); break;
+      case 'choose':
         if (cursorIndex != null) {
           session.tapCell(cursorIndex);
           updateAllUI();
           e.preventDefault();
         }
         break;
-      case 'h': case 'H': session.hint(); break;
-      case 'u': case 'U': session.undo(); break;
-      case 'a': case 'A': session.addRows(); updateAllUI(); break;
-      case 'r': case 'R': renderer?.resize(); ui.toast('Camera reset.'); break;
+      case 'hint': session.hint(); break;
+      case 'undo': session.undo(); break;
+      case 'addRows': session.addRows(); updateAllUI(); break;
+      case 'camera': renderer?.resize(); ui.toast('Camera reset.'); break;
       default: break;
     }
   });

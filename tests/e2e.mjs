@@ -11,10 +11,8 @@
  *   1280x800 and mobile 390x844 (touch).
  *
  * The game is fully playable offline as a guest (see js/platform.js), so this
- * test serves the repo with a minimal embedded static server. The one network
- * call the game makes offline is the host-detection probe GET /api/v1/time;
- * its expected 404 console message is filtered (the game handles it by design
- * and switches to offline mode).
+ * test serves the repo with a minimal embedded static server and asserts a
+ * standalone load makes zero same-origin /api or /ws requests.
  *
  * Regression coverage for previously fixed defects (see knownissues.md):
  *  - Practice mode must render its setup screen (missing import regression).
@@ -80,13 +78,14 @@ const browserNoise = /GL Driver Message|GPU stall due to ReadPixels|Automatic fa
 const errors = [];
 function watch(page, tag) {
   page.on('pageerror', (e) => errors.push(`[${tag}] pageerror: ${e.message}`));
+  page.on('request', (r) => {
+    const u = new URL(r.url());
+    if (/^127\.0\.0\.1$|^localhost$/.test(u.hostname) && /^\/(api|ws)(\/|$)/.test(u.pathname)) errors.push(`[${tag}] own-server request: ${r.method()} ${u.pathname}`);
+  });
   page.on('console', (m) => {
     if (m.type() !== 'error' && m.type() !== 'warning') return;
     const text = m.text();
     if (browserNoise.test(text)) return;
-    // Expected offline host-detection probe (GET /api/v1/time 404): the game
-    // catches this and runs in its supported offline/guest mode.
-    if (/Failed to load resource/.test(text) && (m.location()?.url || '').includes('/api/v1/')) return;
     errors.push(`[${tag}] console ${m.type()}: ${text}`);
   });
 }

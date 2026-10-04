@@ -453,3 +453,7 @@ body[data-gfx-background="animated"]:not(.reduced-motion) .tile-pair + .tile-pai
 }
 body.reduced-motion .cell-btn.hint { animation: none; }
 body.reduced-motion .toast { animation: none; }
+
+/* StarHermit sign-in / invite buttons are hidden unless applicable */
+.link-btn[hidden] { display: none; }
+.chip-avatar { width: 18px; height: 18px; border-radius: 50%; vertical-align: middle; margin-right: 6px; object-fit: cover; }

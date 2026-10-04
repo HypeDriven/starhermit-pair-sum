@@ -38,6 +38,23 @@ export function syncText(state) {
   }[state] || 'Off — local only';
 }
 
+const KEY_NAMES = { Escape: 'Esc', ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓', Space: 'Space', Enter: 'Enter', NumpadEnter: 'Num Enter' };
+const keyLabel = (code) => KEY_NAMES[code] || String(code || '').replace(/^Key/, '').replace(/^Digit/, '');
+const ACTION_TEXT = [
+  [['left', 'right', 'up', 'down'], 'Move among cells'], [['choose'], 'Select / connect'], [['cancel'], 'Cancel selection · Pause'],
+  [['hint'], 'Hint'], [['undo'], 'Undo'], [['addRows'], 'Add rows'], [['camera'], 'Reset camera'],
+];
+/** Help rows from bindings { action: [codes] }: key label -> action text. */
+export function bindingLabels(keys) {
+  const out = {};
+  for (const [actions, text] of ACTION_TEXT) {
+    const label = actions.map((a) => (keys[a] || []).map(keyLabel).join(' / ')).filter(Boolean).join(' ');
+    if (label) out[label] = text;
+  }
+  out.Gamepad = DEFAULT_BINDINGS.Gamepad;
+  return out;
+}
+
 export const DEFAULT_BINDINGS = {
   'Arrow keys': 'Move among cells',
   'Enter / Space': 'Select / connect',
@@ -121,8 +138,13 @@ export class UI {
   setTopStatus(text) { $('topbar-status').textContent = text || ''; }
 
   updateProfileChip() {
-    $('btn-profile').textContent = this.platform.profile.guest
-      ? '👤 Guest' : `👤 ${this.platform.profile.name}`;
+    const btn = $('btn-profile');
+    const guest = this.platform.profile.guest;
+    btn.textContent = guest ? '👤 Guest' : `${this.platform.avatarUrl ? '' : '👤 '}${this.platform.profile.name}`;
+    if (!guest && this.platform.avatarUrl) {
+      const img = h('img', { class: 'chip-avatar', src: this.platform.avatarUrl, alt: '', width: '18', height: '18' });
+      btn.prepend(img);
+    }
   }
 
   // Cloud-save status, shown in the right-rail status slot.
@@ -232,7 +254,11 @@ export class UI {
 
   focusCell(i) {
     const btn = this.mirrorButtons?.[i];
-    if (btn && btn.getAttribute('data-empty') !== '1') btn.focus();
+    if (btn && btn.getAttribute('data-empty') !== '1') {
+      // Hidden mirror cells cannot receive focus or show the directional cursor.
+      this.setMirrorVisible(true);
+      btn.focus({ preventScroll: true });
+    }
   }
 
   // --- title / modes ---------------------------------------------------------------
@@ -376,7 +402,7 @@ export class UI {
 
   // --- help ----------------------------------------------------------------------------
 
-  renderHelp(bindings) {
+  renderHelp(keys) {
     const body = $('help-body');
     body.innerHTML = '';
     const cell = (txt, cls = '') => h('div', { class: `demo-cell ${cls}`, text: txt });
@@ -412,9 +438,9 @@ export class UI {
         h('h3', { text: c.t }), h('p', { text: c.p }),
         c.demo.length ? h('div', { class: 'rule-demo' }, c.demo) : null));
     }
-    const map = { ...DEFAULT_BINDINGS, ...(bindings || {}) };
+    // Effective keyboard bindings (StarHermit rebinds included).
     const controls = h('div', { class: 'rule-card' }, h('h3', { text: 'Controls' }));
-    for (const [k, v] of Object.entries(map)) {
+    for (const [k, v] of Object.entries(keys ? bindingLabels(keys) : DEFAULT_BINDINGS)) {
       controls.append(h('p', {}, h('kbd', { text: k }), ` ${v}`));
     }
     body.append(controls);
@@ -465,7 +491,6 @@ export class UI {
       row('Haptics', check('haptics')),
       row('Timing assistance (+50% clocks)', check('timingAssist')),
       group('Privacy'),
-      row('Share anonymous usage stats', check('telemetryConsent')),
       h('div', { class: 'set-row' },
         h('label', { text: 'Tutorial' }),
         h('button', { class: 'chip', type: 'button', onclick: () => onChange('replayTutorial', true) }, 'Replay lessons')),

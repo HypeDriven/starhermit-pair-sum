@@ -341,6 +341,6 @@ export class Session {
       assists: this.def.assists, rulesV: this.def.rulesV, contentV: this.def.v,
       durationMs: this.state.elapsedMs,
     };
-    this.platform.recordResult(result, this.replayEnvelope());
+    this.platform.recordResult(result);
   }
 }
