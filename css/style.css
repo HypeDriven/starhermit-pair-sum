@@ -165,7 +165,7 @@ body.left-handed .action-tray { flex-direction: row-reverse; }
 .countdown[hidden] { display: none; }
 .countdown {
   position: absolute; inset: 0; display: grid; place-items: center; z-index: 7;
-  font-family: var(--serif); font-size: clamp(4rem, 18vw, 9rem); font-weight: 700;
+  font-family: var(--serif); font-size: clamp(4rem, calc(18vw / var(--ui-scale, 1)), 9rem); font-weight: 700;
   color: var(--accent); text-shadow: 0 4px 24px rgba(0,0,0,0.25); pointer-events: none;
 }
 
@@ -196,13 +196,13 @@ body.left-handed .action-tray { flex-direction: row-reverse; }
 /* overflowing title content stays reachable from the top (safe centring) */
 .screen-title { justify-content: safe center; }
 .screen[hidden] { display: none; }
-.screen h1 { font-family: var(--serif); font-size: clamp(1.8rem, 5vw, 2.6rem); margin: 4vh 0 8px; }
+.screen h1 { font-family: var(--serif); font-size: clamp(1.8rem, calc(5vw / var(--ui-scale, 1)), 2.6rem); margin: calc(4vh / var(--ui-scale, 1)) 0 8px; }
 .screen-sub { opacity: 0.75; margin-top: 0; max-width: 70ch; }
 
 .screen-title { justify-content: center; }
-.screen-title h1 { font-size: clamp(2.6rem, 9vw, 4.5rem); margin: 0; }
+.screen-title h1 { font-size: clamp(2.6rem, calc(9vw / var(--ui-scale, 1)), 4.5rem); margin: 0; }
 .tagline { opacity: 0.8; max-width: 46ch; margin: 10px 0 28px; }
-.title-actions { display: grid; gap: 12px; width: min(320px, 86vw); }
+.title-actions { display: grid; gap: 12px; width: min(320px, calc(86vw / var(--ui-scale, 1))); }
 .title-secondary { margin-top: 26px; display: grid; gap: 6px; }
 
 .big-btn {
@@ -225,11 +225,14 @@ body.left-handed .action-tray { flex-direction: row-reverse; }
 .back-btn {
   margin-top: 22px;
   position: sticky; bottom: calc(8px + var(--sab)); z-index: 2;
-  background: var(--paper); border-radius: 8px;
+  /* a bordered pill so it reads as a button when it floats over content */
+  background: var(--panel); border: 2px solid var(--rule); border-radius: 999px;
+  padding: 8px 20px; text-decoration: none; box-shadow: 0 3px 12px rgba(0, 0, 0, 0.12);
 }
+.back-btn:hover { border-color: var(--accent); }
 
 .card-grid {
-  display: grid; gap: 12px; width: min(720px, 94vw);
+  display: grid; gap: 12px; width: min(720px, calc(94vw / var(--ui-scale, 1)));
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   margin-top: 16px;
 }
@@ -246,7 +249,7 @@ body.left-handed .action-tray { flex-direction: row-reverse; }
 .ach-card.unlocked { border-color: var(--accent); }
 
 .journey-map {
-  display: grid; gap: 8px; width: min(680px, 94vw); margin-top: 14px;
+  display: grid; gap: 8px; width: min(680px, calc(94vw / var(--ui-scale, 1))); margin-top: 14px;
 }
 .journey-theme-row { text-align: left; }
 .journey-theme-row h3 { margin: 14px 0 6px; font-family: var(--serif); }
@@ -261,7 +264,7 @@ body.left-handed .action-tray { flex-direction: row-reverse; }
 .stage-node.locked { opacity: 0.35; cursor: default; }
 .stage-node .stars { position: absolute; bottom: 1px; font-size: 0.55rem; letter-spacing: -1px; }
 
-.setup-body { width: min(560px, 94vw); text-align: left; display: grid; gap: 12px; margin-top: 8px; }
+.setup-body { width: min(560px, calc(94vw / var(--ui-scale, 1))); text-align: left; display: grid; gap: 12px; margin-top: 8px; }
 .setup-body .kv { display: flex; justify-content: space-between; gap: 18px; border-bottom: 1px dashed var(--rule); padding: 6px 0; }
 .setup-body .kv span { flex-shrink: 0; }
 .setup-body .kv strong { text-align: right; font-weight: 600; }
@@ -276,7 +279,7 @@ body.left-handed .action-tray { flex-direction: row-reverse; }
 .diff-btn[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: #fff; }
 
 /* results */
-#results-body { width: min(560px, 94vw); text-align: left; display: grid; gap: 10px; }
+#results-body { width: min(560px, calc(94vw / var(--ui-scale, 1))); text-align: left; display: grid; gap: 10px; }
 .result-headline { font-family: var(--serif); font-size: 1.6rem; text-align: center; }
 .score-table { width: 100%; border-collapse: collapse; }
 .score-table td { padding: 6px 4px; border-bottom: 1px dashed var(--rule); }
@@ -285,7 +288,7 @@ body.left-handed .action-tray { flex-direction: row-reverse; }
 .result-note { font-size: 0.85rem; opacity: 0.75; }
 
 /* help */
-.help-body { width: min(640px, 94vw); text-align: left; display: grid; gap: 14px; }
+.help-body { width: min(640px, calc(94vw / var(--ui-scale, 1))); text-align: left; display: grid; gap: 14px; }
 .rule-card { background: var(--panel); border: 2px solid var(--rule); border-radius: var(--radius); padding: 14px 16px; }
 .rule-card h3 { margin: 0 0 6px; }
 .rule-card p { margin: 4px 0; max-width: 70ch; }
@@ -322,7 +325,7 @@ kbd {
 .gfx-row label { flex: 1 1 8em; }
 .gfx-row select { max-width: 100%; margin-left: auto; }
 .gfx-scale-wrap { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
-.set-row .gfx-scale-wrap input[type="range"] { width: clamp(96px, 30vw, 160px); }
+.set-row .gfx-scale-wrap input[type="range"] { width: clamp(96px, calc(30vw / var(--ui-scale, 1)), 160px); }
 .gfx-scale-value { min-width: 3.2em; text-align: right; font-variant-numeric: tabular-nums; }
 .gfx-summary { font-size: 0.85rem; opacity: 0.8; margin: 8px 0 0; overflow-wrap: anywhere; }
 .gfx-note { font-size: 0.85rem; color: #a33; margin: 4px 0 0; }
@@ -385,7 +388,7 @@ body[data-gfx-background="animated"]:not(.reduced-motion) .tile-pair + .tile-pai
 @media (prefers-reduced-motion: reduce) { .tile { animation: none !important; } }
 
 /* boards */
-#boards-body { width: min(640px, 94vw); text-align: left; }
+#boards-body { width: min(640px, calc(94vw / var(--ui-scale, 1))); text-align: left; }
 .board-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
 .board-table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
 .board-table th, .board-table td { text-align: left; padding: 7px 6px; border-bottom: 1px dashed var(--rule); }
@@ -400,7 +403,7 @@ body[data-gfx-background="animated"]:not(.reduced-motion) .tile-pair + .tile-pai
 .pause-overlay[hidden] { display: none; }
 .pause-card {
   background: var(--panel); border-radius: 16px; padding: 28px 32px;
-  width: min(420px, 92vw); text-align: center; box-shadow: 0 18px 60px rgba(0,0,0,0.3);
+  width: min(420px, calc(92vw / var(--ui-scale, 1))); text-align: center; box-shadow: 0 18px 60px rgba(0,0,0,0.3);
 }
 .pause-card h1 { font-family: var(--serif); margin-top: 0; }
 .pause-summary { font-size: 0.9rem; opacity: 0.8; }
@@ -441,9 +444,9 @@ body[data-gfx-background="animated"]:not(.reduced-motion) .tile-pair + .tile-pai
   .action-tray { left: auto; right: calc(10px + var(--sar)); transform: none; flex-direction: column; bottom: calc(10px + var(--sab)); border-radius: 18px; }
   .tray-btn { min-width: 64px; }
   /* lesson instructions become a compact left side panel, off the board */
-  .lesson-banner { left: calc(10px + var(--sal)); transform: none; top: calc(48px + var(--sat)); max-width: min(34vw, 260px); padding: 8px 10px; font-size: 0.85rem; }
+  .lesson-banner { left: calc(10px + var(--sal)); transform: none; top: calc(48px + var(--sat)); max-width: min(calc(34vw / var(--ui-scale, 1)), 260px); padding: 8px 10px; font-size: 0.85rem; }
   .lesson-actions { margin-top: 6px; }
-  .hud { max-width: 56vw; }
+  .hud { max-width: calc(56vw / var(--ui-scale, 1)); }
 }
 
 /* Reduced motion: remove non-essential animation (event timing preserved). */
@@ -457,3 +460,16 @@ body.reduced-motion .toast { animation: none; }
 /* StarHermit sign-in / invite buttons are hidden unless applicable */
 .link-btn[hidden] { display: none; }
 .chip-avatar { width: 18px; height: 18px; border-radius: 50%; vertical-align: middle; margin-right: 6px; object-fit: cover; }
+
+/* Large screens (ui-scale.js sets --ui-scale: 1 up to 1600×1000, then grows).
+   Each DOM chrome layer is zoomed once; the 3D canvas stays unzoomed and fills
+   the stage. vw/vh lengths inside zoomed layers are divided by the scale. */
+.topbar, .rail, .board-mirror, .hud, .lesson-banner, .action-tray, .countdown,
+.webgl-fallback, .caption-line, .screens, .pause-overlay, .toast-stack, .fps-meter,
+.skip-link { zoom: var(--ui-scale, 1); }
+html.ui-scaled .layout {
+  grid-template-columns:
+    minmax(calc(180px * var(--ui-scale)), calc(240px * var(--ui-scale)))
+    1fr
+    minmax(calc(180px * var(--ui-scale)), calc(240px * var(--ui-scale)));
+}
