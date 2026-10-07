@@ -6,7 +6,7 @@
 import { CATEGORIES, PRESETS, presetTier, choosePreset } from './gfx.js';
 
 const en = {
-  sh: { signIn: 'Sign in with StarHermit', signInHint: 'Sync your progress and settings.', invite: 'Invite a friend', inviteHint: 'Copy your invite link.', copied: 'Invite link copied to the clipboard.', copyFailed: 'Could not copy the invite link.', signedOut: 'Signed out — playing locally.' },
+  sh: { signIn: 'Sign in with StarHermit', signInHint: 'Sync your progress and settings.', invite: 'Invite a friend', inviteHint: 'Copy your invite link.', copied: 'Invite link copied to the clipboard.', copyFailed: 'Could not copy the invite link.', signedOut: 'Signed out — playing locally.', lbPosting: "Posting score to the leaderboard…", lbRank: "Leaderboard rank: #{rank}", lbPosted: "Score posted to the leaderboard.", lbNotPosted: "Score not posted to the leaderboard." },
   section: 'Graphics', quality: 'Quality', auto: 'Auto (detected: {tier})',
   low: 'Low', balanced: 'Balanced', high: 'High', ultra: 'Ultra',
   scale: 'Render scale', fromPreset: 'From preset ({tier})',
@@ -23,9 +23,9 @@ const en = {
 
 const STRINGS = {
   'en-US': { ...en, cat: { ...en.cat, grade: 'Color grade' }, cost: { ...en.cost, grade: 'color grade' } },
-  'en-GB': { ...en, sh: { signIn: 'Sign in with StarHermit', signInHint: 'Sync your progress and settings.', invite: 'Invite a friend', inviteHint: 'Copy your invite link.', copied: 'Invite link copied to the clipboard.', copyFailed: 'Couldn’t copy the invite link.', signedOut: 'Signed out — playing locally.' } },
+  'en-GB': { ...en, sh: { signIn: 'Sign in with StarHermit', signInHint: 'Sync your progress and settings.', invite: 'Invite a friend', inviteHint: 'Copy your invite link.', copied: 'Invite link copied to the clipboard.', copyFailed: 'Couldn’t copy the invite link.', signedOut: 'Signed out — playing locally.', lbPosting: "Posting score to the leaderboard…", lbRank: "Leaderboard rank: #{rank}", lbPosted: "Score posted to the leaderboard.", lbNotPosted: "Score not posted to the leaderboard." } },
   'es-419': {
-    sh: { signIn: 'Iniciar sesión con StarHermit', signInHint: 'Sincroniza tu progreso y tus ajustes.', invite: 'Invitar a un amigo', inviteHint: 'Copia tu enlace de invitación.', copied: 'Enlace de invitación copiado al portapapeles.', copyFailed: 'No se pudo copiar el enlace de invitación.', signedOut: 'Sesión cerrada: juegas en modo local.' },
+    sh: { signIn: 'Iniciar sesión con StarHermit', signInHint: 'Sincroniza tu progreso y tus ajustes.', invite: 'Invitar a un amigo', inviteHint: 'Copia tu enlace de invitación.', copied: 'Enlace de invitación copiado al portapapeles.', copyFailed: 'No se pudo copiar el enlace de invitación.', signedOut: 'Sesión cerrada: juegas en modo local.', lbPosting: "Enviando la puntuación a la clasificación…", lbRank: "Puesto en la clasificación: #{rank}", lbPosted: "Puntuación enviada a la clasificación.", lbNotPosted: "No se envió la puntuación a la clasificación." },
     section: 'Gráficos', quality: 'Calidad', auto: 'Automática (detectada: {tier})',
     low: 'Baja', balanced: 'Equilibrada', high: 'Alta', ultra: 'Ultra',
     scale: 'Escala de render', fromPreset: 'Según calidad ({tier})',
@@ -40,7 +40,7 @@ const STRINGS = {
       bloom: 'resplandor', grade: 'corrección de color', noAA: 'sin antialiasing', particles: 'muchas partículas', animated: 'movimiento ambiental' },
   },
   'de-DE': {
-    sh: { signIn: 'Mit StarHermit anmelden', signInHint: 'Fortschritt und Einstellungen synchronisieren.', invite: 'Freund einladen', inviteHint: 'Einladungslink kopieren.', copied: 'Einladungslink in die Zwischenablage kopiert.', copyFailed: 'Einladungslink konnte nicht kopiert werden.', signedOut: 'Abgemeldet – du spielst lokal weiter.' },
+    sh: { signIn: 'Mit StarHermit anmelden', signInHint: 'Fortschritt und Einstellungen synchronisieren.', invite: 'Freund einladen', inviteHint: 'Einladungslink kopieren.', copied: 'Einladungslink in die Zwischenablage kopiert.', copyFailed: 'Einladungslink konnte nicht kopiert werden.', signedOut: 'Abgemeldet – du spielst lokal weiter.', lbPosting: "Punktzahl wird an die Bestenliste gesendet …", lbRank: "Platz in der Bestenliste: #{rank}", lbPosted: "Punktzahl an die Bestenliste gesendet.", lbNotPosted: "Punktzahl nicht an die Bestenliste gesendet." },
     section: 'Grafik', quality: 'Qualität', auto: 'Automatisch (erkannt: {tier})',
     low: 'Niedrig', balanced: 'Ausgewogen', high: 'Hoch', ultra: 'Ultra',
     scale: 'Renderskalierung', fromPreset: 'Laut Voreinstellung ({tier})',
@@ -55,7 +55,7 @@ const STRINGS = {
       bloom: 'Leuchteffekt', grade: 'Farbkorrektur', noAA: 'keine Kantenglättung', particles: 'viele Partikel', animated: 'Umgebungsbewegung' },
   },
   'fr-FR': {
-    sh: { signIn: 'Se connecter avec StarHermit', signInHint: 'Synchronisez progression et réglages.', invite: 'Inviter un ami', inviteHint: 'Copier votre lien d’invitation.', copied: 'Lien d’invitation copié dans le presse-papiers.', copyFailed: 'Impossible de copier le lien d’invitation.', signedOut: 'Déconnecté — vous jouez en local.' },
+    sh: { signIn: 'Se connecter avec StarHermit', signInHint: 'Synchronisez progression et réglages.', invite: 'Inviter un ami', inviteHint: 'Copier votre lien d’invitation.', copied: 'Lien d’invitation copié dans le presse-papiers.', copyFailed: 'Impossible de copier le lien d’invitation.', signedOut: 'Déconnecté — vous jouez en local.', lbPosting: "Envoi du score au classement…", lbRank: "Rang au classement : #{rank}", lbPosted: "Score envoyé au classement.", lbNotPosted: "Score non envoyé au classement." },
     section: 'Graphismes', quality: 'Qualité', auto: 'Auto (détectée : {tier})',
     low: 'Basse', balanced: 'Équilibrée', high: 'Haute', ultra: 'Ultra',
     scale: 'Échelle de rendu', fromPreset: 'Selon le préréglage ({tier})',
@@ -70,7 +70,7 @@ const STRINGS = {
       bloom: 'halo', grade: 'étalonnage', noAA: 'sans anticrénelage', particles: 'particules denses', animated: 'mouvement d’ambiance' },
   },
   'pt-BR': {
-    sh: { signIn: 'Entrar com StarHermit', signInHint: 'Sincronize seu progresso e suas configurações.', invite: 'Convidar um amigo', inviteHint: 'Copie seu link de convite.', copied: 'Link de convite copiado para a área de transferência.', copyFailed: 'Não foi possível copiar o link de convite.', signedOut: 'Sessão encerrada — jogando localmente.' },
+    sh: { signIn: 'Entrar com StarHermit', signInHint: 'Sincronize seu progresso e suas configurações.', invite: 'Convidar um amigo', inviteHint: 'Copie seu link de convite.', copied: 'Link de convite copiado para a área de transferência.', copyFailed: 'Não foi possível copiar o link de convite.', signedOut: 'Sessão encerrada — jogando localmente.', lbPosting: "Enviando a pontuação para o ranking…", lbRank: "Posição no ranking: #{rank}", lbPosted: "Pontuação enviada para o ranking.", lbNotPosted: "A pontuação não foi enviada para o ranking." },
     section: 'Gráficos', quality: 'Qualidade', auto: 'Automática (detectada: {tier})',
     low: 'Baixa', balanced: 'Equilibrada', high: 'Alta', ultra: 'Ultra',
     scale: 'Escala de renderização', fromPreset: 'Conforme a qualidade ({tier})',
@@ -85,7 +85,7 @@ const STRINGS = {
       bloom: 'brilho', grade: 'correção de cor', noAA: 'sem antisserrilhamento', particles: 'muitas partículas', animated: 'movimento ambiente' },
   },
   'it-IT': {
-    sh: { signIn: 'Accedi con StarHermit', signInHint: 'Sincronizza progressi e impostazioni.', invite: 'Invita un amico', inviteHint: 'Copia il tuo link di invito.', copied: 'Link di invito copiato negli appunti.', copyFailed: 'Impossibile copiare il link di invito.', signedOut: 'Disconnesso: giochi in locale.' },
+    sh: { signIn: 'Accedi con StarHermit', signInHint: 'Sincronizza progressi e impostazioni.', invite: 'Invita un amico', inviteHint: 'Copia il tuo link di invito.', copied: 'Link di invito copiato negli appunti.', copyFailed: 'Impossibile copiare il link di invito.', signedOut: 'Disconnesso: giochi in locale.', lbPosting: "Invio del punteggio alla classifica…", lbRank: "Posizione in classifica: #{rank}", lbPosted: "Punteggio inviato alla classifica.", lbNotPosted: "Punteggio non inviato alla classifica." },
     section: 'Grafica', quality: 'Qualità', auto: 'Automatica (rilevata: {tier})',
     low: 'Bassa', balanced: 'Bilanciata', high: 'Alta', ultra: 'Ultra',
     scale: 'Scala di rendering', fromPreset: 'Da preimpostazione ({tier})',
@@ -102,7 +102,7 @@ const STRINGS = {
 };
 STRINGS['es-ES'] = {
   ...STRINGS['es-419'],
-  sh: { signIn: 'Iniciar sesión con StarHermit', signInHint: 'Sincroniza tu progreso y tus ajustes.', invite: 'Invitar a un amigo', inviteHint: 'Copia tu enlace de invitación.', copied: 'Enlace de invitación copiado al portapapeles.', copyFailed: 'No se ha podido copiar el enlace de invitación.', signedOut: 'Sesión cerrada: juegas en local.' },
+  sh: { signIn: 'Iniciar sesión con StarHermit', signInHint: 'Sincroniza tu progreso y tus ajustes.', invite: 'Invitar a un amigo', inviteHint: 'Copia tu enlace de invitación.', copied: 'Enlace de invitación copiado al portapapeles.', copyFailed: 'No se ha podido copiar el enlace de invitación.', signedOut: 'Sesión cerrada: juegas en local.', lbPosting: "Enviando la puntuación a la clasificación…", lbRank: "Puesto en la clasificación: #{rank}", lbPosted: "Puntuación enviada a la clasificación.", lbNotPosted: "No se ha enviado la puntuación a la clasificación." },
   scale: 'Escala de renderizado', showFps: 'Mostrar fotogramas por segundo',
   postFailed: 'El posprocesado no está disponible en este dispositivo; el tablero se muestra sin él.',
   cat: { ...STRINGS['es-419'].cat, antialias: 'Suavizado de bordes' },
@@ -110,7 +110,7 @@ STRINGS['es-ES'] = {
 };
 STRINGS['fr-CA'] = {
   ...STRINGS['fr-FR'],
-  sh: { signIn: 'Se connecter avec StarHermit', signInHint: 'Synchronisez votre progression et vos paramètres.', invite: 'Inviter un ami', inviteHint: 'Copier votre lien d’invitation.', copied: 'Lien d’invitation copié dans le presse-papiers.', copyFailed: 'Impossible de copier le lien d’invitation.', signedOut: 'Déconnecté — vous jouez en local.' },
+  sh: { signIn: 'Se connecter avec StarHermit', signInHint: 'Synchronisez votre progression et vos paramètres.', invite: 'Inviter un ami', inviteHint: 'Copier votre lien d’invitation.', copied: 'Lien d’invitation copié dans le presse-papiers.', copyFailed: 'Impossible de copier le lien d’invitation.', signedOut: 'Déconnecté — vous jouez en local.', lbPosting: "Envoi du pointage au classement…", lbRank: "Rang au classement : #{rank}", lbPosted: "Pointage envoyé au classement.", lbNotPosted: "Pointage non envoyé au classement." },
   showFps: 'Afficher les images/s',
   cat: { ...STRINGS['fr-FR'].cat, background: 'Mouvement ambiant' },
   cost: { ...STRINGS['fr-FR'].cost, animated: 'mouvement ambiant' },

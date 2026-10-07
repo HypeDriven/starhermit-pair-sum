@@ -538,6 +538,19 @@ function showResults() {
   ui.renderResults(result, currentDef, { isBest, achievements: newly, nextLabel });
   ui.showScreen('results');
   ui.setPlayingUI(false);
+  postToLeaderboard(result);
+}
+
+// Signed in, a finished ranked round (won or lost, not abandoned) posts its total
+// to the StarHermit high-score board; the results screen shows the rank there.
+function postToLeaderboard(result) {
+  if (!currentDef?.ranked || !platform.hosted || result.status === 'aborted') return;
+  const T = gfxStrings().sh;
+  ui.setLeaderboardLine(T.lbPosting);
+  platform.submitScore(result.score.total).then((r) => {
+    ui.setLeaderboardLine(!r.posted ? T.lbNotPosted
+      : r.rank ? T.lbRank.replace('{rank}', r.rank) : T.lbPosted);
+  });
 }
 
 function checkPersonalBest(result) {

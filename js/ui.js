@@ -400,6 +400,17 @@ export class UI {
     this.announce(`${headline} Total score ${result.score.total}.`, true);
   }
 
+  // StarHermit leaderboard line on the results screen (signed-in ranked rounds only).
+  setLeaderboardLine(text) {
+    const body = $('results-body');
+    let line = document.getElementById('results-lb');
+    if (!line) {
+      line = h('p', { class: 'result-note', id: 'results-lb', role: 'status' });
+      body.append(line);
+    }
+    line.textContent = text;
+  }
+
   // --- help ----------------------------------------------------------------------------
 
   renderHelp(keys) {

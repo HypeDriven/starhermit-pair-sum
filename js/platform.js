@@ -259,7 +259,7 @@ export class Platform {
 
   recordResult(result) {
     // Personal bests are kept locally and travel inside the cloud-saved doc.
-    // Clients can never submit to a platform leaderboard (script-owned).
+    // Signed-in ranked rounds are also posted through submitScore() below.
     this.results.push(result);
     if (this.results.length > 200) this.results = this.results.slice(-200);
     this.saveLocal('results', this.results);
@@ -342,6 +342,22 @@ export class Platform {
     } catch (e) {
       return { source: 'local', entries: local, label: 'casual (local)', error: e.message };
     }
+  }
+
+  // Post a finished ranked round to the leaderboards (score-script.js); resolves
+  // { posted, rank } — rank on the high-score board, or null. Signed in only.
+  async submitScore(total) {
+    if (!this.hosted) return { posted: false, rank: null };
+    const s = sdk();
+    try {
+      const keys = await s.submitScores({ 'high-score': total });
+      if (!(keys || []).includes('high-score')) return { posted: false, rank: null };
+      try {
+        const r = await s.leaderboard('high-score', { pageSize: 100 });
+        const me = (r.items || []).find((e) => e.userId === this.userId);
+        return { posted: true, rank: me ? me.rank : null };
+      } catch { return { posted: true, rank: null }; }
+    } catch { return { posted: false, rank: null }; }
   }
 
   async publicLeaderboardEntry(e) {
