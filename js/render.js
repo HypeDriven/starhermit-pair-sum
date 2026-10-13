@@ -1159,8 +1159,8 @@ export class BoardRenderer {
       this.postKey = key;
       this.buildPost(w, h);
     }
-    if (this.composer) this.composer.render(dtMs / 1000);
-    else this.renderer.render(this.scene, this.camera);
+    if (this.composer) (globalThis.GameOptions ? globalThis.GameOptions.draw(this.composer.renderer, () => this.composer.render(dtMs / 1000)) : this.composer.render(dtMs / 1000));
+    else (globalThis.GameOptions ? globalThis.GameOptions.draw(this.renderer, () => this.renderer.render(this.scene, this.camera)) : this.renderer.render(this.scene, this.camera));
   }
 
   updateTokens(dt) {
