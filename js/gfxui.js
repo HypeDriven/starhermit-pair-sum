@@ -1,9 +1,10 @@
 // Pair Sum — Graphics section of the Settings screen.
 // Quality preset, render scale, per-effect overrides, adaptive resolution,
-// frame-rate readout and a live cost summary. Strings are localized from the
-// browser language (the rest of the game is English-only).
+// frame-rate readout and a live cost summary. Strings follow the game language
+// (js/i18n.js); the section re-renders when it changes.
 
 import { CATEGORIES, PRESETS, presetTier, choosePreset } from './gfx.js';
+import { getLang } from './i18n.js';
 
 const en = {
   sh: { signIn: 'Sign in with StarHermit', signInHint: 'Sync your progress and settings.', invite: 'Invite a friend', inviteHint: 'Copy your invite link.', copied: 'Invite link copied to the clipboard.', copyFailed: 'Could not copy the invite link.', signedOut: 'Signed out — playing locally.', lbPosting: "Posting score to the leaderboard…", lbRank: "Leaderboard rank: #{rank}", lbPosted: "Score posted to the leaderboard.", lbNotPosted: "Score not posted to the leaderboard." },
@@ -134,7 +135,7 @@ export function pickLocale(tag) {
   return 'en-US';
 }
 
-export function gfxStrings(tag = typeof navigator !== 'undefined' ? navigator.language : 'en-US') {
+export function gfxStrings(tag = getLang()) {
   const loc = pickLocale(tag);
   return { locale: loc, ...STRINGS[loc] };
 }

@@ -29,10 +29,15 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { tmpdir } from 'node:os';
 import { chromium } from 'playwright-core';
+import { stubStarHermit, launchToken } from './starhermit-e2e.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const SHOT = (stage, vp) => `/tmp/pair-sum-e2e-${stage}-${vp}.png`;
+// Language-step screenshots go to E2E_SHOT_DIR (default: the OS temp dir).
+const LANG_SHOT = (name) => join(process.env.E2E_SHOT_DIR || tmpdir(), `pair-sum-e2e-${name}.png`);
+let apiStubbed = false;   // only the language step stubs the StarHermit API on this origin
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -80,7 +85,7 @@ function watch(page, tag) {
   page.on('pageerror', (e) => errors.push(`[${tag}] pageerror: ${e.message}`));
   page.on('request', (r) => {
     const u = new URL(r.url());
-    if (/^127\.0\.0\.1$|^localhost$/.test(u.hostname) && /^\/(api|ws)(\/|$)/.test(u.pathname)) errors.push(`[${tag}] own-server request: ${r.method()} ${u.pathname}`);
+    if (!apiStubbed && /^127\.0\.0\.1$|^localhost$/.test(u.hostname) && /^\/(api|ws)(\/|$)/.test(u.pathname)) errors.push(`[${tag}] own-server request: ${r.method()} ${u.pathname}`);
   });
   page.on('console', (m) => {
     if (m.type() !== 'error' && m.type() !== 'warning') return;
@@ -363,7 +368,7 @@ async function runPass(browser, vp, viewport) {
     });
 
     await step(`${vp}: practice setup renders (regression: missing import)`, async () => {
-      await page.locator('.mode-card', { hasText: 'Practice' }).click();
+      await page.locator('.mode-card').filter({ has: page.locator('h3', { hasText: /^🧘 Practice$/ }) }).click();
       await page.waitForSelector('#screen-setup:not([hidden])');
       const diffs = await page.locator('.diff-btn').count();
       if (diffs !== 4) throw new Error(`expected 4 difficulty buttons, got ${diffs}`);
@@ -372,7 +377,7 @@ async function runPass(browser, vp, viewport) {
     });
 
     await step(`${vp}: journey map → stage 1 setup`, async () => {
-      await page.locator('.mode-card', { hasText: 'Journey' }).click();
+      await page.locator('.mode-card').filter({ has: page.locator('h3', { hasText: /^🗺️ Journey$/ }) }).click();
       await page.waitForSelector('#screen-journey:not([hidden])');
       const nodes = await page.locator('.stage-node').count();
       if (nodes !== 40) throw new Error(`expected 40 journey stages, got ${nodes}`);
@@ -438,9 +443,10 @@ async function runPass(browser, vp, viewport) {
       await page.waitForSelector('#screen-settings:not([hidden])');
       const machine = await page.evaluate(() => window.__pairsum.session.machine);
       if (machine !== 'paused') throw new Error(`opening settings mid-round should pause, got ${machine}`);
-      await page.locator('input[aria-label="muted"]').check();
-      await page.locator('select[aria-label="palette"]').selectOption('deuteranopia');
-      await page.locator('input[aria-label="reducedMotion"]').check();
+      const settings = page.locator('#screen-settings');
+      await settings.getByLabel('Mute all', { exact: true }).check();
+      await settings.getByLabel('Color palette', { exact: true }).selectOption('deuteranopia');
+      await settings.getByLabel('Reduced motion', { exact: true }).check();
       const applied = await page.evaluate(() => ({
         muted: window.__pairsum.platform.settings.muted,
         palette: window.__pairsum.platform.settings.palette,
@@ -469,6 +475,71 @@ async function runPass(browser, vp, viewport) {
       await page.waitForSelector('#pause-overlay:not([hidden])');
       await page.click('#btn-resume');
       await page.waitForFunction(() => window.__pairsum.session.machine === 'active', null, { timeout: 5000 });
+    });
+
+    await step(`${vp}: language — Automatic follows the StarHermit preference; a choice mid-round re-renders in place, syncs ui.language; report a problem`, async () => {
+      apiStubbed = true;
+      const calls = await stubStarHermit(page, { preferredLanguage: 'fr-CA' });
+      await page.goto('about:blank');
+      await page.goto(`${BASE}/index.html#game_token=${launchToken()}`, { waitUntil: 'load' });
+      await page.waitForFunction(() => document.documentElement.lang === 'fr-CA' && window.__pairsum?.session.machine === 'title');
+      if ((await page.textContent('#btn-play')).trim() !== 'Jouer') throw new Error('title not in French');
+      await page.click('#btn-play');
+      await page.locator('.mode-card').filter({ has: page.locator('h3', { hasText: /^🗺️ Parcours$/ }) }).click();
+      await page.waitForSelector('#screen-journey:not([hidden])');
+      if ((await page.locator('#journey-map h3').first().textContent()).trim() !== 'Carnet de terrain') throw new Error('journey content not in French');
+      await page.locator('.stage-node:not(.locked)').first().click();
+      await page.waitForSelector('#screen-setup:not([hidden])');
+      if (!/Premières lignes/.test(await page.textContent('#setup-h'))) throw new Error('stage title not in French');
+      await page.click('#btn-setup-start');
+      await page.waitForFunction(() => window.__pairsum.session.machine === 'active', null, { timeout: 10000 });
+      const before = await page.evaluate(() => JSON.stringify(window.__pairsum.session.state.cells));
+      await page.click('#btn-settings');
+      await page.waitForSelector('#screen-settings:not([hidden])');
+      const choice = page.locator('[data-game-language="choice"]');
+      await choice.scrollIntoViewIfNeeded();
+      const autoLabel = await choice.locator('option').first().textContent();
+      if (autoLabel !== 'Automatique — Français (Canada)') throw new Error('Automatic label not resolved: ' + autoLabel);
+      await choice.selectOption('de-DE');
+      await page.waitForFunction(() => document.documentElement.lang === 'de-DE');
+      await page.waitForFunction(() => /Im Konto gespeichert/.test(document.querySelector('[data-game-language="status"]').textContent));
+      if (calls.settings['ui.language']?.choice !== 'de-DE') throw new Error('ui.language not saved: ' + JSON.stringify(calls.settings));
+      if ((await page.textContent('#settings-h')).trim() !== 'Einstellungen') throw new Error('settings heading not re-rendered');
+      if (!(await page.locator('#screen-settings').getByLabel('Alles stumm', { exact: true }).count())) throw new Error('settings rows not re-rendered');
+      if ((await page.textContent('#gfx-heading')).trim() !== 'Grafik') throw new Error('graphics box not re-rendered');
+      if ((await page.locator('#gfx-section [data-game-options-fps]').count()) !== 1) throw new Error('shared sections lost or duplicated');
+      await page.locator('[data-game-report="title"]').scrollIntoViewIfNeeded();
+      await page.fill('[data-game-report="title"]', 'Test report');
+      await page.click('[data-game-report="send"]');
+      await page.waitForFunction(() => /Bericht gesendet/.test(document.querySelector('[data-game-report="status"]').textContent));
+      if (!calls.reports?.[0] || calls.reports[0].kind !== 'bug') throw new Error('report not posted');
+      await page.locator('#settings-h').scrollIntoViewIfNeeded();
+      await page.screenshot({ path: LANG_SHOT('settings-' + vp) });
+      await page.locator('#screen-settings [data-back]').click();
+      await page.waitForSelector('#pause-overlay:not([hidden])');
+      if ((await page.textContent('#btn-resume')).trim() !== 'Fortsetzen' || !/Ziffern übrig/.test(await page.textContent('#pause-summary'))) throw new Error('pause card not re-rendered');
+      await page.click('#btn-resume');
+      await page.waitForFunction(() => window.__pairsum.session.machine === 'active', null, { timeout: 5000 });
+      if ((await page.evaluate(() => JSON.stringify(window.__pairsum.session.state.cells))) !== before) throw new Error('language change reset the round');
+      if (!/Ziffern übrig/.test(await page.textContent('#hud-objective'))) throw new Error('HUD not re-rendered');
+      for (const id of ['btn-hint', 'btn-undo', 'btn-addrows', 'btn-pause', 'btn-settings', 'btn-help', 'btn-profile']) {
+        const ok = await page.locator('#' + id).evaluate((el) => {
+          const r = el.getBoundingClientRect();
+          const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+          return r.right <= window.innerWidth + 0.5 && r.bottom <= window.innerHeight + 0.5 && (hit === el || el.contains(hit));
+        });
+        if (!ok) throw new Error(`#${id} covered or cut off in German`);
+      }
+      await page.screenshot({ path: LANG_SHOT('play-' + vp) });
+      await page.click('#btn-settings');
+      await choice.scrollIntoViewIfNeeded();
+      await choice.selectOption('auto');
+      await page.waitForFunction(() => document.documentElement.lang === 'fr-CA');
+      await page.locator('#screen-settings [data-back]').click();
+      await page.click('#btn-leave-round');
+      await page.waitForSelector('#screen-title:not([hidden])');
+      await page.unroute(/\/api\/v1\//);
+      apiStubbed = false;
     });
   } finally {
     await context.close();

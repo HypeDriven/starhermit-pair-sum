@@ -141,7 +141,7 @@ export class Session {
     // Tutorials gate on the lesson's required action before touching rules.
     const gate = this.lessonGate({ type: 'pair', a, b });
     if (gate) {
-      this.emit({ type: 'lesson-blocked', message: gate });
+      this.emit({ type: 'lesson-blocked', message: gate, stepText: this.currentLessonStep()?.text || null });
       this.selection = null;
       this.emit({ type: 'select', index: null });
       return { error: 'lesson-gated' };
@@ -167,7 +167,7 @@ export class Session {
     if (this.machine !== 'active' && this.machine !== 'tutorial') return { error: 'not-active' };
     const gate = this.lessonGate({ type: 'addRows' });
     if (gate) {
-      this.emit({ type: 'lesson-blocked', message: gate });
+      this.emit({ type: 'lesson-blocked', message: gate, stepText: this.currentLessonStep()?.text || null });
       return { error: 'lesson-gated' };
     }
     if (!canAddRows(this.state)) return { error: 'nothing-to-add' };
@@ -274,9 +274,11 @@ export class Session {
       const awayMs = Date.now() - (snap.savedAt || Date.now());
       this.transition('paused', 'reconnect');
       this.emit({ type: 'round', def: this.def, state: this.state });
+      const awayMin = Math.max(1, Math.round(awayMs / 60000));
       this.emit({
         type: 'while-away',
-        summary: `Round restored. You were away ${Math.max(1, Math.round(awayMs / 60000))} min; ` +
+        awayMin, remaining: remainingCount(this.state), score: this.state.score.total,
+        summary: `Round restored. You were away ${awayMin} min; ` +
           `${remainingCount(this.state)} digits remain, score ${this.state.score.total}.`,
       });
       return snap;

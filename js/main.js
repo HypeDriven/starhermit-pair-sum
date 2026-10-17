@@ -8,11 +8,13 @@ import { UI } from './ui.js';
 import { AudioEngine } from './audio.js';
 import {
   LESSONS, JOURNEY, CHALLENGES, dailyForDate, practiceDef, makeDef, generateBoard, THEMES,
-  PRACTICE_DIFFICULTIES,
+  PRACTICE_DIFFICULTIES, ACHIEVEMENTS,
 } from './content.js';
 import { listLegalPairs, remainingCount } from './rules.js';
 import { resolve as resolveGraphics } from './gfx.js';
 import { gfxStrings } from './gfxui.js';
+import { T, N, initLanguage, onLanguage } from './i18n.js';
+import { defTitle } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -49,12 +51,45 @@ async function copyInvite() {
   catch { ui.toast(S.copyFailed); }
 }
 
+function labelAccountButtons() {
+  const shText = gfxStrings();
+  for (const [id, key] of [['btn-sh-signin', 'signIn'], ['btn-sh-invite', 'invite']]) $(id).textContent = shText.sh[key];
+}
+
+function relocalize() {
+  if (!ui) return;
+  labelAccountButtons();
+  if (ui.currentScreen === 'setup' && (pendingSetup?.kind === 'learn' || pendingSetup?.kind === 'challenge') && pendingSetup.lesson == null) {
+    openMode(pendingSetup.kind);
+  } else {
+    ui.relocalize();
+  }
+  if (session?.state && currentDef) {
+    updateAllUI();
+    const step = session.currentLessonStep?.();
+    if (step && !$('lesson-banner').hidden) ui.showLesson(T(step.text));
+  }
+  if (!$('pause-overlay').hidden) $('pause-summary').textContent = pauseSummary();
+}
+
 // ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
 
+// Audio captions arrive in English; show them in the game language.
+function captionText(t) {
+  const m = /^Pair cleared, chain (\d+)$/.exec(t);
+  if (m) return T('Pair cleared, chain {n}', { n: m[1] });
+  return T(t);
+}
+const CAPTION_KEYS = [N('Pair cleared'), N('Row cleared'), N('Rows added'), N('That pair is not legal'), N('Board clear!'), N('Round over')];
+
 async function boot() {
-  platform = await new Platform().init();
+  // Game language first (sh-language.js): every screen renders in it.
+  initLanguage();
+  platform = new Platform();
+  platform.playerName = (id) => T('Player {id}', { id });
+  platform = await platform.init();
   platform.verifyProgress();
   // Pull cloud progression when hosted (conflict-safe merge, both kept).
   if (platform.hosted) await platform.reconcileProgress().catch(() => {});
@@ -63,7 +98,7 @@ async function boot() {
   keys = await platform.loadBindings(KEY_DEFAULTS);
   wireAchievements();
   ui = new UI(platform);
-  audio = new AudioEngine(platform.settings, (t) => ui.caption(t));
+  audio = new AudioEngine(platform.settings, (t) => ui.caption(captionText(t)));
 
   session = new Session(platform, onSessionEvent);
   session.onTransition = onTransition;
@@ -80,11 +115,13 @@ async function boot() {
     ui.updateProfileChip();
     refreshAccount();
   };
-  const shText = gfxStrings();
-  for (const [id, key] of [['btn-sh-signin', 'signIn'], ['btn-sh-invite', 'invite']]) {
-    $(id).textContent = shText.sh[key];
-    $(id).lang = shText.locale;
-  }
+  labelAccountButtons();
+  platform.onProgressMerged = () => {
+    if (ui.currentScreen === 'title') ui.renderTitle(platform.progress, dailyForDate(new Date(platform.serverNow())), session.hasSnapshot());
+  };
+  // Live language switching: markup re-applies itself (i18n.js); everything
+  // rendered in code re-renders here without touching the round.
+  onLanguage(relocalize);
   $('btn-sh-signin').onclick = () => platform.signIn();
   $('btn-sh-invite').onclick = () => { audio.uiClick(); copyInvite(); };
   refreshAccount();
@@ -143,10 +180,10 @@ function enterFallback(e) {
 function onRendererEvent(e) {
   if (e.type === 'webgl-lost') {
     ui.setMirrorVisible(true);
-    ui.toast('Graphics context lost — notebook view active while GPU recovers.');
+    ui.toast(T('Graphics context lost — notebook view active while GPU recovers.'));
   } else if (e.type === 'webgl-restored') {
     ui.setMirrorVisible(false);
-    ui.toast('3D view restored.');
+    ui.toast(T('3D view restored.'));
   }
 }
 
@@ -186,11 +223,11 @@ function onSessionEvent(e) {
       break; // handled via game-event
     case 'hint':
       if (e.none) {
-        ui.showAlert(e.canAddRows ? 'No pairs connect — try Add Rows.' : 'No moves left.');
-        ui.announce(e.canAddRows ? 'No legal pairs. Use Add Rows.' : 'No moves left.', true);
+        ui.showAlert(e.canAddRows ? T('No pairs connect — try Add Rows.') : T('No moves left.'));
+        ui.announce(e.canAddRows ? T('No legal pairs. Use Add Rows.') : T('No moves left.'), true);
       } else {
         audio.onGameEvent({ type: 'hint' });
-        ui.announce(`Hint: connect the ${hintText(e)}.`);
+        ui.announce(hintText(e));
         renderer?.setHint(e);
         ui.syncMirror(session.state, session.selection, legalTargets(), e);
         setTimeout(() => ui.syncMirror(session.state, session.selection, legalTargets(), null), 2400);
@@ -200,26 +237,28 @@ function onSessionEvent(e) {
       audio.onGameEvent({ type: 'undo' });
       syncRender();
       updateAllUI();
-      ui.announce('Undone.');
+      ui.announce(T('Undone.'));
       break;
     case 'lesson-step':
       if (e.done) {
         ui.showLesson(null);
-        ui.toast('Lesson complete — finish the page!');
-        ui.announce('Lesson steps complete. Clear the rest of the page.');
+        ui.toast(T('Lesson complete — finish the page!'));
+        ui.announce(T('Lesson steps complete. Clear the rest of the page.'));
         if (session.machine === 'tutorial') session.transition('active', 'lesson-steps-done');
       } else {
-        ui.showLesson(e.step.text);
+        ui.showLesson(T(e.step.text));
       }
       break;
     case 'lesson-blocked':
-      ui.showAlert('That is not the lesson move.');
-      ui.announce(e.message, true);
+      ui.showAlert(T('That is not the lesson move.'));
+      ui.announce(e.stepText ? T('Follow the lesson: {step}', { step: T(e.stepText) }) : T(e.message), true);
       break;
-    case 'while-away':
-      ui.toast(e.summary);
-      ui.announce(e.summary);
+    case 'while-away': {
+      const text = T('Round restored. You were away {min} min; {left} digits remain, score {score}.', { min: e.awayMin, left: e.remaining, score: e.score });
+      ui.toast(text);
+      ui.announce(text);
       break;
+    }
     default:
       break;
   }
@@ -228,18 +267,20 @@ function onSessionEvent(e) {
 function hintText(h) {
   const va = session.state.cells[h.a];
   const vb = session.state.cells[h.b];
-  const kind = h.via === 'row' ? 'same row' : h.via === 'col' ? 'same column' : 'fold between rows';
-  return `${va} and ${vb}, along the ${kind}`;
+  const key = h.via === 'row' ? N('Hint: connect the {a} and {b}, along the same row.')
+    : h.via === 'col' ? N('Hint: connect the {a} and {b}, along the same column.')
+    : N('Hint: connect the {a} and {b}, along the fold between rows.');
+  return T(key, { a: va, b: vb });
 }
 
 function invalidReasonText(reason) {
-  return {
-    'no-match': 'Those digits do not match — pairs must be equal or sum to ten.',
-    'blocked': 'The path is blocked by other digits.',
-    'same-cell': 'Pick two different cells.',
-    'empty-cell': 'That cell is already cleared.',
-    'round-over': 'The round is over.',
-  }[reason] || 'That move is not legal.';
+  return T({
+    'no-match': N('Those digits do not match — pairs must be equal or sum to ten.'),
+    'blocked': N('The path is blocked by other digits.'),
+    'same-cell': N('Pick two different cells.'),
+    'empty-cell': N('That cell is already cleared.'),
+    'round-over': N('The round is over.'),
+  }[reason] || N('That move is not legal.'));
 }
 
 function onTransition(from, to, reason) {
@@ -258,7 +299,7 @@ function onTransition(from, to, reason) {
 function pauseSummary() {
   const s = session.state;
   if (!s) return '';
-  return `${remainingCount(s)} digits left · score ${s.score.total} · ${s.moves} moves`;
+  return T('{left} digits left · score {score} · {moves} moves', { left: remainingCount(s), score: s.score.total, moves: s.moves });
 }
 
 // ---------------------------------------------------------------------------
@@ -350,14 +391,15 @@ function openMode(mode) {
     case 'learn': {
       pendingSetup = { kind: 'learn' };
       const body = $('setup-body');
-      ui.renderSetup({ title: 'Learn', def: null, note: 'Pick a lesson. Each teaches one rule and asks you to perform it.' });
+      ui.renderSetup({ title: N('Learn'), def: null, note: N('Pick a lesson. Each teaches one rule and asks you to perform it.') });
       const list = document.createElement('div');
       list.className = 'card-grid';
       LESSONS.forEach((l, i) => {
         const b = document.createElement('button');
         b.className = 'mode-card';
         b.type = 'button';
-        b.innerHTML = `<h3>${i + 1}. ${l.title}</h3><p>${l.tutorial.steps[0].text.slice(0, 72)}…</p>`;
+        const intro = T(l.tutorial.steps[0].text);
+        b.innerHTML = `<h3>${i + 1}. ${T(l.title)}</h3><p>${intro.length > 72 ? intro.slice(0, 72) + '…' : intro}</p>`;
         b.onclick = () => { pendingSetup = { kind: 'learn', lesson: i }; startPending(); };
         list.append(b);
       });
@@ -381,7 +423,7 @@ function openMode(mode) {
       pendingSetup = { kind: 'fixed', def };
       ui.renderSetup({
         title: def.title, def,
-        note: 'Same seed for every player today. Daily seeds are immutable; a defective day is excluded from ranking, never silently replaced.',
+        note: N('Same seed for every player today. Daily seeds are immutable; a defective day is excluded from ranking, never silently replaced.'),
       });
       $('btn-setup-start').style.display = '';
       ui.showScreen('setup');
@@ -392,10 +434,10 @@ function openMode(mode) {
       applyTimingAssist(def);
       pendingSetup = { kind: 'practice' };
       ui.renderSetup({
-        title: 'Practice', def, difficulties: [...PRACTICE_DIFFICULTIES],
+        title: N('Practice'), def, difficulties: [...PRACTICE_DIFFICULTIES],
         selectedDiff: practiceDiff,
         onDiff: (id) => { practiceDiff = id; openMode('practice'); },
-        note: 'Unranked. Restart and undo freely.',
+        note: N('Unranked. Restart and undo freely.'),
       });
       $('btn-setup-start').style.display = '';
       ui.showScreen('setup');
@@ -403,7 +445,7 @@ function openMode(mode) {
     }
     case 'challenge': {
       pendingSetup = { kind: 'challenge' };
-      ui.renderSetup({ title: 'Challenge', def: null, note: 'Constrained goals. Ranked where noted.' });
+      ui.renderSetup({ title: N('Challenge'), def: null, note: N('Constrained goals. Ranked where noted.') });
       const body = $('setup-body');
       const list = document.createElement('div');
       list.className = 'card-grid';
@@ -411,7 +453,7 @@ function openMode(mode) {
         const b = document.createElement('button');
         b.className = 'mode-card';
         b.type = 'button';
-        b.innerHTML = `<h3>${c.name}</h3><p>${c.note}</p><div class="meta">ranked</div>`;
+        b.innerHTML = `<h3>${T(c.name)}</h3><p>${T(c.note)}</p><div class="meta">${T('ranked')}</div>`;
         b.onclick = () => {
           const def = c.build();
           applyTimingAssist(def);
@@ -438,12 +480,12 @@ function openMode(mode) {
         mechanics: ['equal-pairs', 'sum-pairs', 'seq-paths', 'add-rows'],
         par: { moves: Math.floor(filled / 2), timeMs: Math.floor(filled / 2) * 4000 },
         assists: { hints: false, undo: false }, ranked: true,
-        goals: { type: 'clear', note: 'One shared weekly seed. No assists.' },
+        goals: { type: 'clear', note: N('One shared weekly seed. No assists.') },
       });
       pendingSetup = { kind: 'fixed', def };
       ui.renderSetup({
         title: def.title, def,
-        note: 'Shared weekly seed and ruleset. Results stay on this device; signed in, the global board is shown read-only.',
+        note: N('Shared weekly seed and ruleset. Results stay on this device; signed in, the global board is shown read-only.'),
       });
       $('btn-setup-start').style.display = '';
       ui.showScreen('setup');
@@ -518,7 +560,7 @@ function continueRound() {
     ui.showScreen(null);
     ui.showPause(pauseSummary());
   } else {
-    ui.toast('No saved round found.');
+    ui.toast(T('No saved round found.'));
     ui.renderTitle(platform.progress, dailyForDate(new Date(platform.serverNow())), false);
   }
 }
@@ -532,9 +574,9 @@ function showResults() {
   platform.progress._lastNewAchievements = null;
   const isBest = checkPersonalBest(result);
   const nextLabel =
-    currentDef?.mode === 'journey' ? 'Next page' :
-    currentDef?.mode === 'learn' ? 'Next lesson' :
-    currentDef?.mode === 'daily' || currentDef?.mode === 'score' ? 'Scores' : 'New page';
+    currentDef?.mode === 'journey' ? N('Next page') :
+    currentDef?.mode === 'learn' ? N('Next lesson') :
+    currentDef?.mode === 'daily' || currentDef?.mode === 'score' ? N('Scores') : N('New page');
   ui.renderResults(result, currentDef, { isBest, achievements: newly, nextLabel });
   ui.showScreen('results');
   ui.setPlayingUI(false);
@@ -545,11 +587,11 @@ function showResults() {
 // to the StarHermit high-score board; the results screen shows the rank there.
 function postToLeaderboard(result) {
   if (!currentDef?.ranked || !platform.hosted || result.status === 'aborted') return;
-  const T = gfxStrings().sh;
-  ui.setLeaderboardLine(T.lbPosting);
+  const sh = () => gfxStrings().sh;
+  ui.setLeaderboardLine(() => sh().lbPosting);
   platform.submitScore(result.score.total).then((r) => {
-    ui.setLeaderboardLine(!r.posted ? T.lbNotPosted
-      : r.rank ? T.lbRank.replace('{rank}', r.rank) : T.lbPosted);
+    ui.setLeaderboardLine(() => (!r.posted ? sh().lbNotPosted
+      : r.rank ? sh().lbRank.replace('{rank}', r.rank) : sh().lbPosted));
   });
 }
 
@@ -595,7 +637,7 @@ function nextAfterResults() {
 function wireAchievements() {
   platform.onAchievements = (keys) => {
     platform.progress._lastNewAchievements = keys;
-    for (const k of keys) ui.toast(`🎖️ Achievement unlocked: ${k.replace(/_/g, ' ')}`);
+    for (const k of keys) ui.toast(T('🎖️ Achievement unlocked: {name}', { name: T(ACHIEVEMENTS.find((a) => a.key === k)?.name || k.replace(/_/g, ' ')) }));
   };
 }
 
@@ -686,7 +728,7 @@ function updateSelection() {
 function updateAllUI() {
   if (!session.state || !currentDef) return;
   ui.updateHUD(session.state, currentDef);
-  ui.setTopStatus(`${currentDef.title}`);
+  ui.setTopStatus(defTitle(currentDef));
   syncRender();
 }
 
@@ -830,7 +872,7 @@ function wireInput() {
       case 'hint': session.hint(); break;
       case 'undo': session.undo(); break;
       case 'addRows': session.addRows(); updateAllUI(); break;
-      case 'camera': renderer?.resize(); ui.toast('Camera reset.'); break;
+      case 'camera': renderer?.resize(); ui.toast(T('Camera reset.')); break;
       default: break;
     }
   });
@@ -841,9 +883,9 @@ function previewForCursor() {
   const check = session.legalTargetPreview(cursorIndex);
   renderer?.previewPath(check);
   if (check && !check.ok && check.reason) {
-    ui.announce(`Not legal: ${invalidReasonText(check.reason)}`);
+    ui.announce(T('Not legal: {reason}', { reason: invalidReasonText(check.reason) }));
   } else if (check?.ok) {
-    ui.announce('Legal target. Press Enter to connect.');
+    ui.announce(T('Legal target. Press Enter to connect.'));
   }
 }
 

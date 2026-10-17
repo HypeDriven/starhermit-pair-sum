@@ -8,6 +8,7 @@
 // server routes (/api, /ws): the device clock is authoritative and boards,
 // achievements and stats are local.
 
+import { N } from './i18n.js';
 const sdk = () => (typeof window !== 'undefined' && window.StarHermit) || globalThis.StarHermit || null;
 
 // Player preferences mirrored to the StarHermit settings KV (progress-like
@@ -43,6 +44,9 @@ export class Platform {
       this._inited = true;
       sh.init();
       let was = this.hosted;
+      // A cloud write lost to a save made on another device: re-read the slot
+      // (lifts the SDK's write block), merge, and save the merged doc again.
+      sh.on('saveconflict', () => { this.reconcileProgress({ conflict: true }).catch(() => this.setSync('error')); });
       sh.on('auth', (a) => {
         if (a.signedIn === was) return; // renewals change nothing visible
         was = a.signedIn;
@@ -90,7 +94,7 @@ export class Platform {
     // Nickname for display (never /api/v1/me); fallback "Player " + id prefix.
     if (!this.hosted) return;
     const p = await sdk().profile();
-    const name = (p ? p.displayName : 'Player ' + String(this.userId).slice(0, 6)).slice(0, 24);
+    const name = (p ? p.displayName : (this.playerName?.(String(this.userId).slice(0, 6)) || 'Player ' + String(this.userId).slice(0, 6))).slice(0, 24);
     this.nickname = name;
     this.profile = { ...this.profile, name, guest: false, platformId: this.userId };
     this.saveProfile();
@@ -100,7 +104,7 @@ export class Platform {
   async displayNameFor(userId) {
     if (userId == null || userId === '') return '—';
     const p = this.hosted ? await sdk().profile(String(userId)) : null;
-    return p ? p.displayName : 'Player ' + String(userId).slice(0, 6);
+    return p ? p.displayName : (this.playerName?.(String(userId).slice(0, 6)) || 'Player ' + String(userId).slice(0, 6));
   }
 
   // --- sign-in, invite, settings KV, controls ------------------------------------
@@ -232,27 +236,24 @@ export class Platform {
     return sdk().loadJSON(); // null when none / unreachable: the local cache continues
   }
 
-  // Merge local + cloud progression. Both snapshots preserved on conflict;
-  // the remote copy wins when it is ahead (or when neither is a descendant).
-  async reconcileProgress() {
+  // Merge local + cloud progression (at launch and after a saveconflict): the
+  // better result of each record survives from both sides (mergeProgress); the
+  // merged doc is written back when it differs from the cloud copy.
+  async reconcileProgress({ conflict = false } = {}) {
     const remote = await this.cloudLoad();
-    if (!remote) return { source: 'local' };
-    const localRev = this.progress.rev || 0;
-    const remoteRev = remote.rev || 0;
-    if (remoteRev > localRev) {
-      this.saveLocal('progress:pre-reconcile', this.progress); // preserve both
-      this.progress = remote;
-      this.saveProgress();
-      return { source: 'cloud' };
+    if (!remote || typeof remote !== 'object') {
+      if (conflict) this.scheduleCloudSave();
+      return { source: 'local' };
     }
-    if (localRev > remoteRev) {
-      await this.cloudSave(this.progress).then(
-        () => this.setSync('synced'),
-        () => this.setSync('error'),
-      );
-      return { source: 'local-wins' };
-    }
-    return { source: 'same' };
+    const merged = mergeProgress(remote, this.progress);
+    const strip = (d) => JSON.stringify({ ...d, rev: 0, v: 1 });
+    const changed = strip(merged) !== strip(this.progress);
+    if (changed) this.saveLocal('progress:pre-reconcile', this.progress); // keep the pre-merge copy
+    this.progress = merged;
+    if (conflict || strip(merged) !== strip(remote)) this.saveProgress(); // also schedules the cloud write
+    else this.saveLocal('progress', this.progress);
+    if (changed) this.onProgressMerged?.();
+    return { source: changed ? 'merged' : 'same' };
   }
 
   // --- results / leaderboards ---------------------------------------------------------
@@ -329,18 +330,18 @@ export class Platform {
       .slice(0, 50)
       .map((r) => ({ name: this.profile.name, me: true, ...publicEntry(r) }));
     if (board === 'journey' || board === 'practice') {
-      return { source: 'local', entries: local, label: 'casual (local)' };
+      return { source: 'local', entries: local, label: N('casual (local)') };
     }
     if (!this.hosted) {
-      return { source: 'local', entries: local, label: 'casual (local)' };
+      return { source: 'local', entries: local, label: N('casual (local)') };
     }
     try {
       const res = await sdk().leaderboard(null, { pageSize: 50, scope: friends ? 'friends' : undefined });
-      if (!res || !res.board) return { source: 'local', entries: local, label: 'casual (local)' };
+      if (!res || !res.board) return { source: 'local', entries: local, label: N('casual (local)') };
       const entries = await Promise.all((res.items || []).map((e) => this.publicLeaderboardEntry(e)));
-      return { source: 'global', entries, label: 'global (read-only)' };
+      return { source: 'global', entries, label: N('global (read-only)') };
     } catch (e) {
-      return { source: 'local', entries: local, label: 'casual (local)', error: e.message };
+      return { source: 'local', entries: local, label: N('casual (local)'), error: e.message };
     }
   }
 
@@ -390,6 +391,29 @@ function boardMatches(board, r) {
   if (board === 'challenge') return r.mode === 'challenge';
   if (board.startsWith('daily:')) return r.contentId === board.slice(6);
   return r.mode === board;
+}
+
+/** Merge two progress docs: nothing either side earned is dropped. */
+export function mergeProgress(remote, local) {
+  const a = remote || {}, b = local || {};
+  const out = { v: 1, rev: Math.max(a.rev || 0, b.rev || 0) + 1, journey: {}, achievements: {}, totals: {}, streakDays: [], bestDaily: {}, mastery: {} };
+  for (const id of new Set([...Object.keys(a.journey || {}), ...Object.keys(b.journey || {})])) {
+    const x = a.journey?.[id] || {}, y = b.journey?.[id] || {};
+    out.journey[id] = { done: !!(x.done || y.done), best: Math.max(x.best || 0, y.best || 0), stars: Math.max(x.stars || 0, y.stars || 0) };
+  }
+  for (const k of new Set([...Object.keys(a.achievements || {}), ...Object.keys(b.achievements || {})])) {
+    const ats = [a.achievements?.[k]?.at, b.achievements?.[k]?.at].filter((t) => t != null);
+    out.achievements[k] = { at: ats.length ? Math.min(...ats) : Date.now() };
+  }
+  for (const k of new Set(['pairs', 'clears', ...Object.keys(a.totals || {}), ...Object.keys(b.totals || {})])) {
+    out.totals[k] = Math.max(a.totals?.[k] || 0, b.totals?.[k] || 0);
+  }
+  out.streakDays = [...new Set([...(a.streakDays || []), ...(b.streakDays || [])])].sort().slice(-60);
+  for (const k of new Set([...Object.keys(a.bestDaily || {}), ...Object.keys(b.bestDaily || {})])) {
+    out.bestDaily[k] = Math.max(a.bestDaily?.[k] || 0, b.bestDaily?.[k] || 0);
+  }
+  out.mastery = { ...(a.mastery || {}), ...(b.mastery || {}) };
+  return out;
 }
 
 export function defaultSettings() {

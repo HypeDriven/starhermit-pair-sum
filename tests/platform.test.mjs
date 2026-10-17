@@ -16,14 +16,25 @@ const token = 'h.' + b64u({ sub: 'user-123456', game_scope: 'ps-slug', exp: Math
 const unrefTimeout = (f, ms) => { const t = setTimeout(f, ms); t.unref(); return t; };
 
 function fakeServer() {
-  const calls = [], saves = {}, kv = {};
+  const calls = [], saves = {}, kv = {}, etags = {};
+  let version = 0;
   const fetch = async (url, init = {}) => {
     const method = init.method || 'GET';
     calls.push([method, url]);
     const r = (status, body) => new Response(body == null ? null : body, { status });
     if (url.includes('/cloud-saves/')) {
-      const key = decodeURIComponent(url.split('/cloud-saves/')[1]);
-      if (method === 'PUT') { saves[key] = Buffer.from(JSON.parse(init.body).dataBase64, 'base64'); return r(200, '{}'); }
+      // Conditional writes like the platform: If-Match / If-None-Match after a
+      // load, 412 with the current etag when stale, { etag } on success.
+      const tail = decodeURIComponent(url.split('/cloud-saves/')[1]);
+      const key = tail.replace(/\/info$/, '');
+      const h = new Headers(init.headers || {});
+      if (tail.endsWith('/info')) return r(200, JSON.stringify(saves[key] ? { exists: true, etag: etags[key] } : { exists: false }));
+      if (method === 'PUT') {
+        if ((h.get('If-Match') && h.get('If-Match') !== etags[key]) || (h.get('If-None-Match') === '*' && saves[key])) return r(412, JSON.stringify({ etag: etags[key] || null }));
+        saves[key] = Buffer.from(JSON.parse(init.body).dataBase64, 'base64');
+        etags[key] = '"v' + (++version) + '"';
+        return r(200, JSON.stringify({ etag: etags[key] }));
+      }
       return saves[key] ? r(200, saves[key]) : r(404);
     }
     if (url.endsWith('/profile')) return r(200, JSON.stringify({ username: 'u', nickname: 'Tess' }));
@@ -32,7 +43,7 @@ function fakeServer() {
     if (url.endsWith('/controls')) return r(200, JSON.stringify({ actions: [{ action: 'hint', codes: ['KeyJ'] }] }));
     return r(404);
   };
-  return { calls, saves, kv, fetch };
+  return { calls, saves, kv, etags, fetch, bump(key) { etags[key] = '"v' + (++version) + '"'; } };
 }
 
 function install(hash, srv, hostname = 'ps-slug.starhermit.com') {
@@ -105,4 +116,41 @@ test('standalone: no token means no fetch at all (even on localhost)', async () 
   assert.equal((await P.leaderboard('daily')).source, 'local');
   await tick();
   assert.equal(srv.calls.length, 0);
+});
+
+test('sign-in is offered on a StarHermit UUID host without a token', async () => {
+  const srv = fakeServer();
+  install('', srv, '0b9d6f2e-3c4a-4e5b-9a7c-1d2e3f405162.starhermit.com');
+  const { Platform } = await import('../js/platform.js?uuid');
+  const P = await new Platform().init();
+  assert.equal(P.canSignIn(), true);
+});
+
+test('cloud-save conflict: a write that lost to another device re-reads, merges and saves again', async () => {
+  const srv = fakeServer();
+  const win = install('#game_token=' + token, srv, 'ps-slug.starhermit.com');
+  const { Platform } = await import('../js/platform.js?conflict');
+  const P = await new Platform().init();
+  P.progress.journey['journey-1'] = { done: true, best: 300, stars: 2 };
+  P.progress.totals = { pairs: 40, clears: 2 };
+  await P.reconcileProgress();                     // empty slot; writes are conditional from now on
+  await P.flushCloudSave();
+  const other = { v: 1, rev: 9, journey: { 'journey-1': { done: true, best: 500, stars: 1 }, 'journey-2': { done: true, best: 200, stars: 3 } },
+    achievements: { first_clear: { at: 1 } }, totals: { pairs: 90, clears: 5 }, streakDays: ['2026-10-01'], bestDaily: { 'daily-2026-10-01': 700 }, mastery: {} };
+  srv.saves['game:ps-slug'] = Buffer.from(await win.StarHermit._zip('save.json', new TextEncoder().encode(JSON.stringify(other))));
+  srv.bump('game:ps-slug');
+  P.progress.streakDays = ['2026-10-02'];
+  let merged = 0;
+  P.onProgressMerged = () => { merged++; };
+  P.saveProgress();
+  await P.flushCloudSave();                        // 412 → saveconflict → reconcile
+  for (let i = 0; i < 40 && !merged; i++) await tick();
+  await P.flushCloudSave();
+  const stored = JSON.parse(new TextDecoder().decode(await win.StarHermit._unzip(srv.saves['game:ps-slug'])));
+  assert.deepEqual(stored.journey['journey-1'], { done: true, best: 500, stars: 2 });
+  assert.equal(stored.journey['journey-2'].stars, 3);
+  assert.deepEqual(stored.totals, { pairs: 90, clears: 5 });
+  assert.deepEqual(stored.streakDays, ['2026-10-01', '2026-10-02']);
+  assert.equal(stored.bestDaily['daily-2026-10-01'], 700);
+  assert.ok(stored.achievements.first_clear);
 });
