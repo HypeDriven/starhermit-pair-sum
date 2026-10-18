@@ -295,6 +295,7 @@ async function graphicsSettings(page, vp) {
   st = await state();
   if (st.canvas !== 'high' || st.q.bloom !== 'on' || st.q.ao !== 'on') throw new Error('High not applied: ' + JSON.stringify(st.q));
   if (!/bloom/.test(st.summary) || !/px/.test(st.summary)) throw new Error('summary missing: ' + st.summary);
+  if (!/ · Level 0 · /.test(st.summary)) throw new Error('summary lacks the hardware level: ' + st.summary);
   const fromPreset = await page.locator('#gfx-cat-shadows option[value="preset"]').textContent();
   if (!/From preset \(Medium\)/.test(fromPreset)) throw new Error('preset label: ' + fromPreset);
 

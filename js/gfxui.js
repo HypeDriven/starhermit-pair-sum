@@ -13,7 +13,7 @@ const en = {
   scale: 'Render scale', fromPreset: 'From preset ({tier})',
   adaptive: 'Adaptive resolution', showFps: 'Show frame rate',
   postFailed: 'Post-processing is unavailable on this device; the board renders without it.',
-  noGpu: 'unknown GPU', no3d: '3D view unavailable — effects are off.',
+  noGpu: 'unknown GPU', level: 'Level {n}', no3d: '3D view unavailable — effects are off.',
   cat: { shadows: 'Shadows', ao: 'Ambient occlusion', bloom: 'Bloom', grade: 'Colour grade', antialias: 'Anti-aliasing',
     particles: 'Particles', background: 'Ambient motion', detail: 'Surface detail' },
   tier: { off: 'Off', on: 'On', low: 'Low', medium: 'Medium', high: 'High', fxaa: 'FXAA', smaa: 'SMAA', msaa: 'MSAA',
@@ -32,7 +32,7 @@ const STRINGS = {
     scale: 'Escala de render', fromPreset: 'Según calidad ({tier})',
     adaptive: 'Resolución adaptativa', showFps: 'Mostrar FPS',
     postFailed: 'El posprocesado no está disponible en este dispositivo; el tablero se muestra sin él.',
-    noGpu: 'GPU desconocida', no3d: 'Vista 3D no disponible: efectos desactivados.',
+    noGpu: 'GPU desconocida', level: 'Nivel {n}', no3d: 'Vista 3D no disponible: efectos desactivados.',
     cat: { shadows: 'Sombras', ao: 'Oclusión ambiental', bloom: 'Resplandor', grade: 'Corrección de color', antialias: 'Antialiasing',
       particles: 'Partículas', background: 'Movimiento ambiental', detail: 'Detalle de superficies' },
     tier: { off: 'No', on: 'Sí', low: 'Baja', medium: 'Media', high: 'Alta', fxaa: 'FXAA', smaa: 'SMAA', msaa: 'MSAA',
@@ -47,7 +47,7 @@ const STRINGS = {
     scale: 'Renderskalierung', fromPreset: 'Laut Voreinstellung ({tier})',
     adaptive: 'Adaptive Auflösung', showFps: 'Bildrate anzeigen',
     postFailed: 'Nachbearbeitung ist auf diesem Gerät nicht verfügbar; das Spielfeld wird ohne sie dargestellt.',
-    noGpu: 'unbekannte GPU', no3d: '3D-Ansicht nicht verfügbar – Effekte sind aus.',
+    noGpu: 'unbekannte GPU', level: 'Stufe {n}', no3d: '3D-Ansicht nicht verfügbar – Effekte sind aus.',
     cat: { shadows: 'Schatten', ao: 'Umgebungsverdeckung', bloom: 'Leuchteffekt', grade: 'Farbkorrektur', antialias: 'Kantenglättung',
       particles: 'Partikel', background: 'Umgebungsbewegung', detail: 'Oberflächendetails' },
     tier: { off: 'Aus', on: 'An', low: 'Niedrig', medium: 'Mittel', high: 'Hoch', fxaa: 'FXAA', smaa: 'SMAA', msaa: 'MSAA',
@@ -62,7 +62,7 @@ const STRINGS = {
     scale: 'Échelle de rendu', fromPreset: 'Selon le préréglage ({tier})',
     adaptive: 'Résolution adaptative', showFps: 'Afficher les IPS',
     postFailed: 'Le post-traitement est indisponible sur cet appareil ; le plateau s’affiche sans.',
-    noGpu: 'GPU inconnu', no3d: 'Vue 3D indisponible : effets désactivés.',
+    noGpu: 'GPU inconnu', level: 'Niveau {n}', no3d: 'Vue 3D indisponible : effets désactivés.',
     cat: { shadows: 'Ombres', ao: 'Occlusion ambiante', bloom: 'Halo lumineux', grade: 'Étalonnage des couleurs', antialias: 'Anticrénelage',
       particles: 'Particules', background: 'Mouvement d’ambiance', detail: 'Détail des surfaces' },
     tier: { off: 'Non', on: 'Oui', low: 'Basse', medium: 'Moyenne', high: 'Haute', fxaa: 'FXAA', smaa: 'SMAA', msaa: 'MSAA',
@@ -77,7 +77,7 @@ const STRINGS = {
     scale: 'Escala de renderização', fromPreset: 'Conforme a qualidade ({tier})',
     adaptive: 'Resolução adaptativa', showFps: 'Mostrar FPS',
     postFailed: 'O pós-processamento não está disponível neste aparelho; o tabuleiro é exibido sem ele.',
-    noGpu: 'GPU desconhecida', no3d: 'Visão 3D indisponível — efeitos desligados.',
+    noGpu: 'GPU desconhecida', level: 'Nível {n}', no3d: 'Visão 3D indisponível — efeitos desligados.',
     cat: { shadows: 'Sombras', ao: 'Oclusão ambiente', bloom: 'Brilho', grade: 'Correção de cor', antialias: 'Antisserrilhamento',
       particles: 'Partículas', background: 'Movimento ambiente', detail: 'Detalhe das superfícies' },
     tier: { off: 'Desligado', on: 'Ligado', low: 'Baixa', medium: 'Média', high: 'Alta', fxaa: 'FXAA', smaa: 'SMAA', msaa: 'MSAA',
@@ -92,7 +92,7 @@ const STRINGS = {
     scale: 'Scala di rendering', fromPreset: 'Da preimpostazione ({tier})',
     adaptive: 'Risoluzione adattiva', showFps: 'Mostra FPS',
     postFailed: 'La post-elaborazione non è disponibile su questo dispositivo; il tabellone viene mostrato senza.',
-    noGpu: 'GPU sconosciuta', no3d: 'Vista 3D non disponibile: effetti disattivati.',
+    noGpu: 'GPU sconosciuta', level: 'Livello {n}', no3d: 'Vista 3D non disponibile: effetti disattivati.',
     cat: { shadows: 'Ombre', ao: 'Occlusione ambientale', bloom: 'Bagliore', grade: 'Correzione colore', antialias: 'Antialiasing',
       particles: 'Particelle', background: 'Movimento ambientale', detail: 'Dettaglio superfici' },
     tier: { off: 'No', on: 'Sì', low: 'Bassa', medium: 'Media', high: 'Alta', fxaa: 'FXAA', smaa: 'SMAA', msaa: 'MSAA',
@@ -229,7 +229,7 @@ export function renderGraphicsSection(host, api) {
       summary.textContent = L.no3d;
       return;
     }
-    summary.textContent = `${i.gpu || L.noGpu} · ${i.summary}`;
+    summary.textContent = [i.gpu || L.noGpu, i.level != null ? (L.level || 'Level {n}').replace('{n}', i.level) : null, i.summary].filter(Boolean).join(' · ');
     note.hidden = !i.postFailed;
     note.textContent = i.postFailed ? L.postFailed : '';
   };

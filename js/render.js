@@ -16,7 +16,7 @@ import { FXAAShader } from '../vendor/three/addons/shaders/FXAAShader.js';
 import { RoomEnvironment } from '../vendor/three/addons/environments/RoomEnvironment.js';
 import { mergeVertices } from '../vendor/three/addons/utils/BufferGeometryUtils.js';
 import { getTheme } from './content.js';
-import { detectPreset, describe, resolve, SHADOW_MAP } from './gfx.js';
+import { detectLevel, presetForLevel, describe, resolve, sparkCap, moteCount, SHADOW_MAP } from './gfx.js';
 
 // Authored framing constants (no magic offsets elsewhere).
 export const FRAMING = {
@@ -36,8 +36,6 @@ export const FRAMING = {
 const LIGHT = { exposure: 2.3, key: 0.77, hemi: 0.23, env: 0.14 };
 // Unlit markers/effects are authored in display terms; divide out the exposure.
 const UNLIT = 1 / LIGHT.exposure;
-const PARTICLE_CAP = { low: 600, high: 3000 };
-const MOTE_COUNT = { low: 36, high: 80 };
 
 // Colour grade + vignette (display-space colours in, display-space out).
 // Mild S-curve and saturation; lifted blacks keep ink digits crisp.
@@ -84,11 +82,13 @@ const LAYER_PICK = 1;     // explicit interaction layer (only tokens)
 
 // --- procedural textures -----------------------------------------------------
 
-function makeDigitTexture(theme, digit) {
+// Authored on a 256 px grid and drawn at the preset's budget size (`size`).
+function makeDigitTexture(theme, digit, size = 256) {
   const S = 256;
   const cv = document.createElement('canvas');
-  cv.width = cv.height = S;
+  cv.width = cv.height = size;
   const g = cv.getContext('2d');
+  g.scale(size / S, size / S);
   // Outer band = side/bevel colour (token sides sample the corner of this).
   g.fillStyle = theme.tokenEdge;
   g.fillRect(0, 0, S, S);
@@ -128,7 +128,7 @@ function makeDigitTexture(theme, digit) {
 
 // Rounded, bevelled token: top cap UVs span the whole digit texture; the
 // sides sample the texture's outer band (token edge colour).
-function makeTokenGeometry(detailed) {
+function makeTokenGeometry(detailed, budget = { curve: 5, bevel: 4 }) {
   const t = FRAMING.tokenScale * FRAMING.cellSize;
   const bevel = detailed ? 0.045 : 0.03;
   const inner = t / 2 - bevel;
@@ -146,7 +146,7 @@ function makeTokenGeometry(detailed) {
   const depth = Math.max(0.02, FRAMING.tokenHeight - bevel * 2);
   const geo = new THREE.ExtrudeGeometry(shape, {
     depth, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel,
-    bevelSegments: detailed ? 4 : 1, curveSegments: detailed ? 5 : 2,
+    bevelSegments: detailed ? budget.bevel : 1, curveSegments: detailed ? budget.curve : 2,
   });
   geo.rotateX(-Math.PI / 2);
   geo.translate(0, -depth / 2, 0);
@@ -234,11 +234,13 @@ function makeGrainTexture() {
   return tex;
 }
 
-function makePaperTexture(theme) {
+// Authored on a 1024 px grid and drawn at the preset's budget size (`size`).
+function makePaperTexture(theme, size = 1024) {
   const S = 1024;
   const cv = document.createElement('canvas');
-  cv.width = cv.height = S;
+  cv.width = cv.height = size;
   const g = cv.getContext('2d');
+  g.scale(size / S, size / S);
   g.fillStyle = theme.paper;
   g.fillRect(0, 0, S, S);
   // Ruled lines
@@ -273,6 +275,21 @@ function makePaperTexture(theme) {
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   return tex;
+}
+
+// Assets that depend on the preset's budget (token mesh and materials, digit and paper textures).
+function assetKey(q) {
+  const b = q.budget;
+  return [q.detail, b.material, b.digit, b.paper, b.curve, b.bevel, b.paperBump].join('|');
+}
+
+// Run a post pass at a fraction of the frame: EffectComposer.addPass/setSize hand every pass the full
+// frame size, so the pass's own setSize applies the budget's scale (half-res bloom/GTAO below Ultra).
+function atScale(pass, k) {
+  if (!(k < 1)) return pass;
+  const setSize = pass.setSize.bind(pass);
+  pass.setSize = (w, h) => setSize(Math.max(1, Math.round(w * k)), Math.max(1, Math.round(h * k)));
+  return pass;
 }
 
 function roundRect(g, x, y, w, h, r) {
@@ -340,9 +357,17 @@ export class BoardRenderer {
 
     this.gpu = readGpu(this.renderer);
     this.mobile = isMobileDevice();
-    this.detected = detectPreset(this.gpu, this.mobile);
+    // StarHermit hardware level (js/gpu-level.js): renderer string + device facts (phone/tablet, cores,
+    // memory, screen).
+    let sys = { mobile: this.mobile, webgl2: this.renderer.capabilities.isWebGL2 };
+    try {
+      const G = globalThis.StarHermitGpu;
+      if (G) { const d = G.detectSystem(); sys = { ...sys, mobile: sys.mobile || d.mobile, touch: d.touch, screen: d.screen, cores: d.cores, memoryGb: d.memoryGb, astc: d.astc }; }
+    } catch { /* defaults */ }
+    this.gpuLevel = detectLevel(this.gpu, sys);
+    this.detected = presetForLevel(this.gpuLevel);
     this.gfxSaved = opts.graphics || {};
-    this.q = resolve(this.gfxSaved, this.detected);
+    this.q = resolve(this.gfxSaved, this.detected, this.gpuLevel);
 
     this.renderer.domElement.addEventListener('webglcontextlost', (e) => {
       e.preventDefault();
@@ -373,8 +398,8 @@ export class BoardRenderer {
     this.buildParticles();
     this.buildMotes();
     this.rebuildDigitTextures();
-    this.tokenGeo = makeTokenGeometry(this.q.detail === 'detailed');
-    this.builtDetail = this.q.detail;
+    this.tokenGeo = makeTokenGeometry(this.q.detail === 'detailed', this.q.budget);
+    this.builtDetail = assetKey(this.q);
 
     this.running = false;
     this.setGraphics(this.gfxSaved);
@@ -414,17 +439,20 @@ export class BoardRenderer {
       this.scene.remove(this.paper);
     }
     if (this.paperTex) this.paperTex.dispose();
-    this.paperTex = makePaperTexture(this.theme);
+    this.paperTex = makePaperTexture(this.theme, this.q.budget.paper);
     this.paperTex.repeat.set(3, 3);
     const detailed = this.q.detail === 'detailed';
     if (detailed && !this.grainTex) {
       this.grainTex = makeGrainTexture();
       this.grainTex.repeat.set(14, 14);
     }
-    const mat = new THREE.MeshStandardMaterial({
-      map: this.paperTex, roughness: 0.95, metalness: 0, envMapIntensity: LIGHT.env,
-      ...(detailed ? { bumpMap: this.grainTex, bumpScale: 0.6 } : {}),
-    });
+    // Lambert paper on Low; the grain bump only where the budget allows it (High/Ultra).
+    const mat = this.q.budget.material === 'lambert'
+      ? new THREE.MeshLambertMaterial({ map: this.paperTex })
+      : new THREE.MeshStandardMaterial({
+        map: this.paperTex, roughness: 0.95, metalness: 0, envMapIntensity: LIGHT.env,
+        ...(detailed && this.q.budget.paperBump ? { bumpMap: this.grainTex, bumpScale: 0.6 } : {}),
+      });
     this.paper = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), mat);
     this.paper.rotation.x = -Math.PI / 2;
     this.paper.position.y = -FRAMING.tokenHeight / 2 - 0.01;
@@ -530,13 +558,13 @@ export class BoardRenderer {
   }
 
   buildParticles() {
-    const cap = PARTICLE_CAP[this.q.particles] || PARTICLE_CAP.low;
+    const cap = sparkCap(this.q);
     if (this.points) {
       this.points.geometry.dispose();
       this.points.material.dispose();
       this.scene.remove(this.points);
     }
-    this.builtParticles = this.q.particles;
+    this.builtParticles = cap;
     this.particleCap = cap;
     this.particleData = new Float32Array(cap * 8); // x,y,z,vx,vy,vz,life,size
     this.particleAlive = 0;
@@ -561,7 +589,7 @@ export class BoardRenderer {
       this.motes.material.dispose();
       this.scene.remove(this.motes);
     }
-    const n = MOTE_COUNT[this.q.particles] || MOTE_COUNT.low;
+    const n = moteCount(this.q);
     const pos = new Float32Array(n * 3);
     this.moteSeed = new Float32Array(n * 4);
     let s = 97531;
@@ -580,7 +608,7 @@ export class BoardRenderer {
     }));
     this.motes.frustumCulled = false;
     this.motes.layers.set(LAYER_ENV);
-    this.builtMotes = this.q.particles;
+    this.builtMotes = n;
     this.scene.add(this.motes);
     this.updateMotes(0);
   }
@@ -605,7 +633,8 @@ export class BoardRenderer {
   rebuildDigitTextures() {
     for (const t of this.digitTextures) t?.dispose();
     this.digitTextures = [null];
-    for (let d = 1; d <= 9; d++) this.digitTextures.push(makeDigitTexture(this.theme, d));
+    for (let d = 1; d <= 9; d++) this.digitTextures.push(makeDigitTexture(this.theme, d, this.q.budget.digit));
+    this.builtDigit = this.q.budget.digit;
   }
 
   // Each token owns its material (sharing the digit texture), so selection
@@ -616,7 +645,10 @@ export class BoardRenderer {
       map, metalness: 0, envMapIntensity: LIGHT.env,
       emissive: new THREE.Color(this.theme.select), emissiveIntensity: 0,
     };
-    return this.q.detail === 'detailed'
+    // Per the preset's budget: Lambert on Low, Standard on Balanced, clear-coated Physical on High/Ultra.
+    const tier = this.q.budget.material;
+    if (tier === 'lambert') return new THREE.MeshLambertMaterial({ map, emissive: common.emissive, emissiveIntensity: 0 });
+    return this.q.detail === 'detailed' && tier === 'physical'
       ? new THREE.MeshPhysicalMaterial({ ...common, roughness: 0.48, clearcoat: 0.65, clearcoatRoughness: 0.28 })
       : new THREE.MeshStandardMaterial({ ...common, roughness: 0.55, metalness: 0.05 });
   }
@@ -647,8 +679,10 @@ export class BoardRenderer {
   /** Apply saved graphics settings live (no reload). */
   setGraphics(saved) {
     this.gfxSaved = saved || {};
-    const g = resolve(this.gfxSaved, this.detected);
+    const g = resolve(this.gfxSaved, this.detected, this.gpuLevel);
     this.q = g;
+    // Frosted pause overlay only where the budget allows a per-frame backdrop blur (High/Ultra).
+    document.body.classList.toggle('gfx-blur', !!g.budget.blur);
     const size = SHADOW_MAP[g.shadows];
     const on = size > 0;
     const shadowChanged = this.renderer.shadowMap.enabled !== on;
@@ -660,10 +694,11 @@ export class BoardRenderer {
       this.keyLight.shadow.map = null;
     }
     for (const view of this.tokens.values()) view.mesh.castShadow = on;
-    if (this.builtDetail !== g.detail) {
-      this.builtDetail = g.detail;
+    if (this.builtDetail !== assetKey(g)) {
+      this.builtDetail = assetKey(g);
+      if (this.builtDigit !== g.budget.digit) this.rebuildDigitTextures();
       const old = this.tokenGeo;
-      this.tokenGeo = makeTokenGeometry(g.detail === 'detailed');
+      this.tokenGeo = makeTokenGeometry(g.detail === 'detailed', g.budget);
       for (const view of this.tokens.values()) {
         const em = view.mesh.material.emissive.clone();
         const ei = view.mesh.material.emissiveIntensity;
@@ -681,8 +716,8 @@ export class BoardRenderer {
       this.paper.material.needsUpdate = true;
       this.slots.material.needsUpdate = true;
     }
-    if (this.builtParticles !== g.particles) this.buildParticles();
-    if (this.builtMotes !== g.particles) this.buildMotes();
+    if (this.builtParticles !== sparkCap(g)) this.buildParticles();
+    if (this.builtMotes !== moteCount(g)) this.buildMotes();
     this.applyMarkerColors();
     this.slots.visible = g.detail === 'detailed';
     this.adaptiveScale = 1;
@@ -701,6 +736,7 @@ export class BoardRenderer {
     const px = [Math.round(w * pr), Math.round(h * pr)];
     return {
       gpu: this.gpu || '',
+      level: this.gpuLevel,
       detected: this.detected,
       resolved: this.q,
       summary: describe(this.q, px, labels),
@@ -758,11 +794,11 @@ export class BoardRenderer {
         ao.blendIntensity = g.ao === 'high' ? 0.85 : 0.7;
         ao.updateGtaoMaterial({ radius: 0.45, distanceExponent: 1.6, thickness: 1.2, scale: 1.0, samples: g.ao === 'high' ? 16 : 8 });
         ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: g.ao === 'high' ? 6 : 4, rings: 2, samples: g.ao === 'high' ? 16 : 8 });
-        composer.addPass(ao);
+        composer.addPass(atScale(ao, g.budget.aoRes));
       }
       if (g.bloom === 'on') {
         // High threshold: only the selection marker, sparks and hot highlights bloom.
-        composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.5, 0.4, 0.9));
+        composer.addPass(atScale(new UnrealBloomPass(new THREE.Vector2(w, h), 0.5, 0.4, 0.9), g.budget.bloomRes));
       }
       composer.addPass(new OutputPass());
       if (g.grade === 'on') composer.addPass(new ShaderPass(GradeShader));
