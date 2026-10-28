@@ -35,6 +35,9 @@ export class Session {
     this.tutorialStep = 0;
     this.pathTallies = { row: 0, col: 0, seq: 0 }; // achievement tracking
     this.onTransition = null;
+    // The session clock (ms). The engine client drives it from the runtime's
+    // fixed steps so pauses, hidden windows and play scripts stay exact.
+    this.clock = () => performance.now();
   }
 
   transition(to, reason) {
@@ -49,7 +52,7 @@ export class Session {
   // --- clock ---------------------------------------------------------------
   nowMs() {
     if (this.machine !== 'active' && this.machine !== 'resolving') return this.state?.elapsedMs ?? 0;
-    return this.pauseAccum + (performance.now() - this.startStamp);
+    return this.pauseAccum + (this.clock() - this.startStamp);
   }
 
   // --- round lifecycle -----------------------------------------------------
@@ -63,12 +66,13 @@ export class Session {
     this.tutorialStep = 0;
     this.pathTallies = { row: 0, col: 0, seq: 0 };
     this.pauseAccum = 0;
+    this.sessionId = `${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`;
     this.transition(def.mode === 'learn' ? 'tutorial' : 'countdown', `start:${def.id}`);
     this.emit({ type: 'round', def, state: this.state });
   }
 
   beginActive() {
-    this.startStamp = performance.now();
+    this.startStamp = this.clock();
     this.pauseAccum = this.state?.elapsedMs ?? 0;
     this.transition('active', 'countdown-complete');
   }
@@ -76,14 +80,14 @@ export class Session {
   pause(reason = 'user') {
     if (this.machine !== 'active') return;
     this.pauseAccum = this.nowMs();
-    this.pauseStart = performance.now();
+    this.pauseStart = this.clock();
     this.transition('paused', reason);
     this.saveSnapshot();
   }
 
   resume() {
     if (this.machine !== 'paused' && this.machine !== 'reconnecting') return;
-    this.startStamp = performance.now();
+    this.startStamp = this.clock();
     this.transition('active', `resume:${this.machineReason}`);
   }
 

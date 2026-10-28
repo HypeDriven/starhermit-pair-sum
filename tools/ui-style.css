@@ -1,0 +1,210 @@
+/* Pair Sum — the browser build's css/style.css rewritten class-based for the
+   engine's UI (`npm run css` converts it into assets/ui-style.json). Element
+   selectors, ids, attribute selectors (body[data-theme], body.high-contrast),
+   color-mix(), opacity on text and @media do not convert: every widget names
+   its classes, the breakpoints are layouts picked in native/screens.ts, and
+   the five notebook themes and the runtime's high contrast are token sets
+   that native/style.ts applies (with the colour-mix shades precomputed:
+   ink-75 / ink-60 for the old faded text, panel-88 / panel-92 for the
+   see-through HUD, accent-dark for the big button's ledge). The ruled-paper
+   screens and the lacquered title tiles of Surface detail are drawn in
+   native/screens.ts. Larger text is the runtime's text size. */
+
+:root {
+  --paper: #f6f1e3;
+  --ink: #2c3244;
+  --rule: #b9c4d6;
+  --accent: #e2703a;
+  --panel: #fffdf6;
+  --focus: #2f80ed;
+  --ink-75: #5d606a;
+  --ink-60: #7c7d82;
+  --panel-88: #fffdf6e0;
+  --panel-92: #fffdf6eb;
+  --accent-dark: #9e4e29;
+  --danger: #c0392b;
+  --legal: #3f9d63;
+}
+
+* { box-sizing: border-box; }
+
+/* ------------------------------------------------------------- text */
+.text { color: var(--ink); font-size: 16px; }
+.text-small { color: var(--ink); font-size: 14.4px; }
+.dim { color: var(--ink-75); font-size: 16px; }
+.dim-small { color: var(--ink-75); font-size: 13.6px; }
+.faint-small { color: var(--ink-60); font-size: 12.5px; }
+.strong { color: var(--ink); font-size: 16px; font-weight: 700; }
+.brand { color: var(--ink); font-family: serif; font-size: 18.4px; font-weight: 700; }
+.top-status { color: var(--ink-75); font-size: 14.4px; text-align: center; }
+.rail-title { color: var(--ink-60); font-size: 13.6px; font-weight: 700; }
+.stat-label { color: var(--ink-75); font-size: 16px; }
+.stat-value { color: var(--ink); font-size: 16px; font-weight: 700; text-align: end; }
+.mini { color: var(--ink-75); font-size: 13.6px; }
+.sync-note { color: var(--ink-60); font-size: 12.8px; }
+.sync-error { color: #aa3333; font-size: 12.8px; }
+.pill-text { color: var(--ink); font-size: 14.4px; text-align: center; }
+.alert-text { color: #ffffff; font-size: 14.4px; text-align: center; }
+.lesson-text { color: var(--ink); font-size: 16px; }
+.countdown { color: var(--accent); font-family: serif; font-size: 128px; font-weight: 700; text-align: center; }
+.toast-text { color: var(--ink); font-size: 14.4px; }
+.caption-text { color: #ffffff; font-size: 13.6px; text-align: center; }
+.screen-h1 { color: var(--ink); font-family: serif; font-size: 41.6px; font-weight: 700; text-align: center; }
+.title-h1 { color: var(--ink); font-family: serif; font-size: 72px; font-weight: 700; text-align: center; }
+.tagline { color: var(--ink-75); font-size: 16px; text-align: center; }
+.sub { color: var(--ink-75); font-size: 16px; text-align: center; }
+.mode-h3 { color: var(--ink); font-size: 16.8px; font-weight: 700; }
+.mode-p { color: var(--ink-75); font-size: 13.6px; }
+.meta { color: var(--ink-60); font-size: 12.5px; }
+.journey-h3 { color: var(--ink); font-family: serif; font-size: 18.7px; font-weight: 700; }
+.stage-n { color: var(--ink); font-size: 14.4px; font-weight: 700; text-align: center; }
+.stage-n-done { color: #ffffff; font-size: 14.4px; font-weight: 700; text-align: center; }
+.stage-stars { color: var(--ink); font-size: 9px; text-align: center; }
+.stage-stars-done { color: #ffffff; font-size: 9px; text-align: center; }
+.kv-key { color: var(--ink); font-size: 16px; }
+.kv-val { color: var(--ink); font-size: 16px; font-weight: 600; text-align: end; }
+.note { color: var(--ink-75); font-size: 13.6px; }
+.result-headline { color: var(--ink); font-family: serif; font-size: 25.6px; text-align: center; }
+.score-num { color: var(--ink); font-size: 16px; font-weight: 700; text-align: end; }
+.total { color: var(--ink); font-size: 19.2px; font-weight: 700; }
+.total-num { color: var(--ink); font-size: 19.2px; font-weight: 700; text-align: end; }
+.rule-h3 { color: var(--ink); font-size: 18.7px; font-weight: 700; }
+.set-group { color: var(--ink-60); font-size: 13.6px; font-weight: 700; }
+.kbd-text { color: var(--ink); font-size: 13.6px; }
+.demo-text { color: var(--ink); font-family: serif; font-size: 16px; font-weight: 700; text-align: center; }
+.tile-text { color: var(--ink); font-family: serif; font-size: 25.6px; font-weight: 700; text-align: center; }
+.tray-icon { color: var(--ink); font-size: 18.4px; text-align: center; }
+.tray-label { color: var(--ink); font-size: 10.9px; text-align: center; }
+.tray-label-primary { color: var(--accent); font-size: 10.9px; font-weight: 700; text-align: center; }
+.th { color: var(--ink); font-size: 15.2px; font-weight: 700; }
+.td { color: var(--ink); font-size: 15.2px; }
+.td-num { color: var(--ink); font-size: 15.2px; text-align: end; }
+
+/* ------------------------------------------------------------- surfaces */
+.page { background: var(--paper); border-radius: 0; }
+.topbar { background: var(--panel); border-bottom: 2px solid var(--rule); border-radius: 0; padding: 8px 12px; }
+.rail { background: var(--panel); border-radius: 0; padding: 16px 14px; }
+.rail-edge { background: var(--rule); border-radius: 0; }
+.stat-row { border-bottom: 1px solid var(--rule); border-radius: 0; padding: 0 0 4px; }
+.hud-pill { background: var(--panel-88); border: 1px solid var(--rule); border-radius: 999px; padding: 5px 16px; }
+.hud-alert { background: var(--danger); border-radius: 8px; padding: 6px 14px; }
+.lesson-banner { background: var(--panel); border: 2px solid var(--accent); border-radius: 10px; padding: 12px 16px; box-shadow: 0 6px 24px #0000002e; }
+.tray { background: var(--panel-92); border: 2px solid var(--rule); border-radius: 999px; padding: 6px 10px; }
+.tray-wide { background: var(--panel-92); border: 2px solid var(--rule); border-radius: 18px; padding: 6px 10px; }
+.toast { background: var(--panel); border: 2px solid var(--accent); border-radius: 10px; padding: 10px 16px; box-shadow: 0 6px 20px #00000033; }
+.caption { background: #000000c7; border-radius: 8px; padding: 4px 12px; }
+.pause-card { background: var(--panel); border-radius: 16px; padding: 28px 32px; box-shadow: 0 18px 60px #0000004d; }
+.mode-card { background: var(--panel); border: 2px solid var(--rule); border-radius: 10px; padding: 16px; }
+.ach-on { background: var(--panel); border: 2px solid var(--accent); border-radius: 10px; padding: 16px; }
+.ach-off { background: var(--panel); border: 2px solid var(--rule); border-radius: 10px; padding: 16px; opacity: 0.5; }
+.kv-row { border-bottom: 1px solid var(--rule); border-radius: 0; padding: 6px 0; }
+.score-row { border-bottom: 1px solid var(--rule); border-radius: 0; padding: 6px 4px; }
+.score-row-last { border-radius: 0; padding: 6px 4px; }
+.set-row { border-bottom: 1px solid var(--rule); border-radius: 0; padding: 10px 0; }
+.rule-card { background: var(--panel); border: 2px solid var(--rule); border-radius: 10px; padding: 14px 16px; }
+.demo-cell { background: var(--panel); border: 2px solid var(--rule); border-radius: 8px; }
+.demo-match { background: #3f9d6322; border: 2px solid #3f9d63; border-radius: 8px; }
+.demo-block { background: #c0392b18; border: 2px solid #c0392b; border-radius: 8px; }
+.kbd { background: var(--panel); border: 1px solid var(--rule); border-bottom: 3px solid var(--rule); border-radius: 6px; padding: 1px 7px; }
+.title-tile { background: var(--panel); border: 2px solid var(--rule); border-radius: 10px; }
+.cursor { border: 3px solid var(--focus); border-radius: 8px; }
+.scrim { background: #14141e73; border-radius: 0; }
+
+/* ------------------------------------------------------------- buttons */
+.chip {
+  min-height: 36px; padding: 6px 14px;
+  background: var(--panel); border: 2px solid var(--rule); border-radius: 999px;
+  color: var(--ink); font-size: 14.4px; text-align: center;
+}
+.chip:hover { border-color: var(--accent); }
+.chip:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.chip:disabled { opacity: 0.45; }
+.big-btn {
+  min-height: 52px; padding: 14px 28px;
+  background: var(--accent); border-radius: 14px; box-shadow: 0 4px 0 var(--accent-dark);
+  color: #ffffff; font-size: 18.4px; font-weight: 700; text-align: center;
+}
+.big-btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.big-btn-secondary {
+  min-height: 52px; padding: 14px 28px;
+  background: var(--panel); border: 2px solid var(--rule); border-radius: 14px;
+  color: var(--ink); font-size: 18.4px; font-weight: 700; text-align: center;
+}
+.big-btn-secondary:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.link-btn {
+  min-height: 44px; padding: 8px 12px;
+  background: #00000000; border-radius: 8px;
+  color: var(--ink); font-size: 16px; text-align: center;
+}
+.link-btn:hover { background: var(--panel); }
+.link-btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.link-danger {
+  min-height: 44px; padding: 8px 12px;
+  background: #00000000; border-radius: 8px;
+  color: var(--danger); font-size: 16px; text-align: center;
+}
+.link-danger:hover { background: var(--panel); }
+.link-danger:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.back-btn {
+  min-height: 44px; padding: 8px 20px;
+  background: var(--panel); border: 2px solid var(--rule); border-radius: 999px; box-shadow: 0 3px 12px #0000001f;
+  color: var(--ink); font-size: 16px; text-align: center;
+}
+.back-btn:hover { border-color: var(--accent); }
+.back-btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.card-btn {
+  min-height: 44px; padding: 16px;
+  background: var(--panel); border: 2px solid var(--rule); border-radius: 10px;
+  color: var(--ink); font-size: 16px; text-align: start;
+}
+.card-btn:hover { border-color: var(--accent); }
+.card-btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.card-btn-accent {
+  min-height: 44px; padding: 16px;
+  background: var(--panel); border: 2px solid var(--accent); border-radius: 10px;
+  color: var(--ink); font-size: 16px; text-align: start;
+}
+.card-btn-accent:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.stage {
+  min-height: 44px; min-width: 44px; padding: 2px;
+  background: var(--panel); border: 2px solid var(--rule); border-radius: 10px;
+  color: var(--ink); font-size: 14.4px; font-weight: 700; text-align: center;
+}
+.stage:hover { border-color: var(--accent); }
+.stage:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.stage:disabled { opacity: 0.35; }
+.stage-mastery {
+  min-height: 44px; min-width: 44px; padding: 2px;
+  background: var(--panel); border: 2px solid var(--accent); border-radius: 10px;
+  color: var(--ink); font-size: 14.4px; font-weight: 700; text-align: center;
+}
+.stage-mastery:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.stage-mastery:disabled { opacity: 0.35; }
+.stage-done {
+  min-height: 44px; min-width: 44px; padding: 2px;
+  background: var(--accent); border: 2px solid var(--rule); border-radius: 10px;
+  color: #ffffff; font-size: 14.4px; font-weight: 700; text-align: center;
+}
+.stage-done:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.stage-mastery-done {
+  min-height: 44px; min-width: 44px; padding: 2px;
+  background: var(--accent); border: 2px solid var(--accent); border-radius: 10px;
+  color: #ffffff; font-size: 14.4px; font-weight: 700; text-align: center;
+}
+.stage-mastery-done:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.diff-btn {
+  min-height: 44px; padding: 10px 16px;
+  background: var(--panel); border: 2px solid var(--rule); border-radius: 8px;
+  color: var(--ink); font-size: 16px; text-align: center;
+}
+.diff-btn:hover { border-color: var(--accent); }
+.diff-btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.diff-btn.active { background: var(--accent); border-color: var(--accent); color: #ffffff; }
+.tray-btn {
+  min-height: 48px; min-width: 56px; padding: 4px 8px;
+  background: #00000000; border-radius: 10px;
+  color: var(--ink); font-size: 10.9px; text-align: center;
+}
+.tray-btn:hover { background: var(--rule); }
+.tray-btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.tray-btn:disabled { opacity: 0.35; }
