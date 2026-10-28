@@ -1,39 +1,36 @@
 # Pair Sum
 
-Connect equal numbers — or pairs that sum to ten — along a clear row, column,
-or reading-order fold. A notebook-world number logic puzzle: Three.js
-presentation over a fully playable semantic HTML layer.
+Connect equal numbers — or pairs that sum to ten — along a clear row,
+column, or reading-order fold. A notebook-world number logic puzzle on the
+StarHermit engine (script game, engine 1.19.2, `engine.minor=20`): played
+natively by the StarHermit client and in browsers by the engine's web
+runtime through the loader `index.html`.
 
-## Run
-
-```sh
-npm start          # serves the game + authoritative API on :8080 (PORT to override)
-# or any static server — the game also runs fully offline/local
-```
-
-Open http://localhost:8080/ and press **Play**.
-
-## Test
+## Run and check
 
 ```sh
-npm test           # rules, content validation, replay determinism, fuzz
+STARHERMIT=~/sh/runtime/1.19.2/starhermit-1.19.2-linux-x86_64/starhermit
+$STARHERMIT .            # play natively (as a guest)
+npm test                 # unit tests + native checks (tsc, starhermit check, play scripts)
+npm run test:browser     # the packaged game in Chrome: desktop, phone, landscape
+npm run package          # after every change: rewrites index.html + starhermit-files.json
+npm run css              # after editing tools/ui-style.css
+npm run plays            # regenerates the generated play scripts from the rules
 ```
 
 ## Layout
 
+- `native/` — the engine client: `main.ts` (entry: flow, input, clock), `screens.ts` (UI), `render.ts` (3D board), `audio.ts`, `platform.ts` (save, options, leaderboard), `quality.ts`, `style.ts`, `i18n.ts`, `game.ts`
 - `js/rules.js` — pure deterministic rules engine (legality, scoring, replay, hashing)
 - `js/content.js` — themes, seeded generator, 40-stage journey, lessons, daily, challenges, validators
 - `js/session.js` — state machine, commands, undo, replay envelope, snapshots
-- `js/render.js` — Three.js scene (procedural tokens/paper, springs, pooled particles, quality tiers)
-- `js/ui.js` — DOM shell: screens, HUD, settings, accessible board mirror
-- `js/audio.js` — synthesized WebAudio buses (music/effects/ambience/voice)
-- `js/platform.js` — local-first persistence + hosted adapter (local boards, cloud save; no own-server calls)
-- `js/main.js` — bootstrap, input routing (pointer/touch/keyboard/gamepad), lifecycle
-- `server.js` — zero-dependency Node host: static files, `/api/v1/*`, replay-validated leaderboards
-- `starhermit.txt` — distribution manifest (`name=Pair Sum`, `launch=index.html`, `server=server.js`)
+- `js/progress.js` — the save document, merges, results, achievements, options
+- `js/i18n.js`, `js/locales/`, `js/sh-strings.js` — the nine locales
+- `score-script.js` — the platform script that posts ranked totals to the `high-score` board
+- `tests/` — node unit tests, `native.mjs` and `native/*.play`; `tools/` — packaging, CSS, play-script generator, browser check
 
 ## Controls
 
 Arrows move · Enter connects · Esc cancel/pause · H hint · U undo · A add rows ·
-R camera reset · gamepad supported. Touch: tap two tokens; everything else is
-in the bottom tray.
+R camera reset (rebind in the runtime's Options) · gamepad supported. Touch:
+tap two tokens; every round action is in the tray.
