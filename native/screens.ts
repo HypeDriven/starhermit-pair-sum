@@ -322,7 +322,7 @@ function boardTargets(L: Layout): void {
     ui.target(name, r, { role: "button" });
   }
   const cur = app.cursor;
-  if (cur != null && s.cells[cur] !== 0) {
+  if (cur != null && app.cursorShown && s.cells[cur] !== 0) {
     const r = render.cellRect(cur);
     if (r) {
       const sc = L.sc, sa = frame().safeArea;
@@ -346,20 +346,26 @@ function toasts(L: Layout): void {
 
 // ------------------------------------------------------------------ the pause card (index.html #pause-overlay)
 function pauseCard(L: Layout): void {
-  const w = Math.min(420, 0.92 * L.lw);
-  const inner = w - 64;
+  // Short landscape: a compact card (the links in wrapping rows) so it fits 390 px.
+  const compact = L.lh < 560;
+  const w = Math.min(compact ? 560 : 420, 0.92 * L.lw);
+  const inner = w - (compact ? 40 : 64);
+  const links: Btn[] = [
+    { id: "btn-pause-settings", text: T("Settings"), style: "link-btn", act: () => openScreen("settings") },
+    { id: "btn-pause-help", text: T("Help"), style: "link-btn", act: () => openScreen("help") },
+    { id: "btn-restart-round", text: T("Restart round"), style: "link-btn", act: () => { resumeRound(); restartRound(); } },
+    { id: "btn-leave-round", text: T("Leave round"), style: "link-danger", act: () => { resumeRound(); leaveRound(); } },
+  ];
   const open = ui.dialog(T("Paused"), "", true, () => {
     ui.column("pause-card", () => {
-      ui.style("screen-h1", { text: { size: 32 } }).id("pause-h").label(T("Paused"));
+      ui.style("screen-h1", { text: { size: compact ? 24 : 32 } }).id("pause-h").label(T("Paused"));
       para(pauseSummary(), inner, "dim-small", "pause-summary");
       ui.column("pause-actions", () => {
         button({ id: "btn-resume", text: T("Resume"), style: "big-btn", width: inner, act: resumeRound });
-        button({ id: "btn-pause-settings", text: T("Settings"), style: "link-btn", act: () => openScreen("settings") });
-        button({ id: "btn-pause-help", text: T("Help"), style: "link-btn", act: () => openScreen("help") });
-        button({ id: "btn-restart-round", text: T("Restart round"), style: "link-btn", act: () => { resumeRound(); restartRound(); } });
-        button({ id: "btn-leave-round", text: T("Leave round"), style: "link-danger", act: () => { resumeRound(); leaveRound(); } });
-      }, { spacing: 8, align: "center", width: inner });
-    }, { style: "pause-card", width: w, align: "center", spacing: 12 });
+        if (compact) flow("pause-links", links, inner, 4);
+        else for (const b of links) button(b);
+      }, { spacing: compact ? 4 : 8, align: "center", width: inner });
+    }, { style: "pause-card", width: w, align: "center", spacing: compact ? 6 : 12, ...(compact ? { padding: 16 } : {}) });
   });
   // Escape / Back closes the card: resume (not on the frame it opened).
   if (!open && fresh()) later(resumeRound);
@@ -597,12 +603,11 @@ function journeyScreen(w: number, L: Layout): void {
   }
 }
 function kv(id: string, key: string, value: string, w: number): void {
-  const kw = textWidth(key, "kv-key") + 2;
+  const kw = textWidth(key, "kv-key") + 4;
   const vw = w - kw - 18;
   ui.row(id, () => {
-    ui.style("kv-key").label(key);
-    ui.spacer();
-    ui.column(`${id}-v`, () => para(value, vw, "kv-val"), { width: Math.min(vw, textWidth(value, "kv-val") + 2), align: "end" });
+    ui.column(`${id}-k`, () => ui.style("kv-key").label(key), { width: kw });
+    ui.column(`${id}-v`, () => para(value, vw - 4, "kv-val"), { width: vw, align: "end" });
   }, { style: "kv-row", width: w, spacing: 18, align: "start" });
 }
 function setupScreen(w: number, L: Layout): void {

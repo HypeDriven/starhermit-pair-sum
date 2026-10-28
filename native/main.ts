@@ -77,6 +77,8 @@ export const app = {
   newAchievements: [] as string[],
   /** The keyboard / pad cursor (the old DOM mirror's focus). */
   cursor: null as number | null,
+  /** The cursor ring shows after keys or pad moved it (the old mirror revealed its focus then), not after taps. */
+  cursorShown: false,
   /** The countdown's start on the session clock (3, 2, 1, Go!: 0.6 s each), or null. */
   countdownAt: null as number | null,
   lesson: null as string | null,
@@ -453,6 +455,7 @@ export function tapCell(i: number): void {
   if (!playing()) return;
   session.tapCell(i);
   app.cursor = i;
+  app.cursorShown = false;
 }
 export function doHint(): void { if (playing()) session.hint(); }
 export function doUndo(): void { if (playing()) session.undo(); }
@@ -496,6 +499,7 @@ function moveCursor(dr: number, dc: number): void {
     }
     if (best != null) app.cursor = best;
   }
+  app.cursorShown = true;
   const v = cells[app.cursor]!;
   announce(T("Row {r}, column {c}, digit {v}", { r: Math.floor(app.cursor / cols) + 1, c: (app.cursor % cols) + 1, v }));
   previewForCursor();
@@ -527,6 +531,7 @@ onAction((e) => {
     if (ui.focused() !== null) return; // Enter / Space on a focused button is the button's
     if (app.cursor == null || session.state!.cells[app.cursor] === 0) { moveCursor(0, 0); return; }
     tapCell(app.cursor);
+    app.cursorShown = true;
     previewForCursor();
   }
 });
@@ -578,7 +583,7 @@ function pointerInput(): void {
     }
     render.previewPath(null);
   }
-  if (hover && playing() && session.selection != null && inStage(hover.x, hover.y) && !onHud(hover.x, hover.y) && app.cursor == null) {
+  if (hover && playing() && session.selection != null && inStage(hover.x, hover.y) && !onHud(hover.x, hover.y) && !app.cursorShown) {
     const cell = render.pickCell(hover.x, hover.y);
     render.previewPath(cell != null && cell !== session.selection ? session.legalTargetPreview(cell) : null);
   }

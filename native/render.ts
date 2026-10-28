@@ -27,7 +27,8 @@ import {
   PointsMaterial, Raycaster, RepeatWrapping, RingGeometry, RoomEnvironment, SRGBColorSpace, Shape, Vector3, pointerToNdc,
   renderer, scene, type Texture,
 } from "starhermit:scene";
-import { OffscreenCanvas, type OffscreenCanvasRenderingContext2D } from "starhermit:canvas";
+import { files } from "starhermit:engine";
+import { FontFace, OffscreenCanvas, fonts, type OffscreenCanvasRenderingContext2D } from "starhermit:canvas";
 import { Content, type Check, type GameEvent, type State, type Theme } from "./game.ts";
 import { MOTE_MAX, moteCount, sparkCap, type Look } from "./quality.ts";
 
@@ -76,6 +77,18 @@ const selectColor = (): string => PALETTE_COLORS[palette]?.select ?? theme.selec
 const legalColor = (): string => PALETTE_COLORS[palette]?.legal ?? theme.legal;
 
 // ---------------------------------------------------------------- procedural textures (render.js, unchanged drawing)
+// The digits' bold serif: the generic serif draws as sans-serif on the web runtime's canvases (reported), so
+// the package carries Liberation Serif Bold (SIL OFL 1.1, assets/fonts/), metric-compatible with Times New Roman.
+let digitFont = "serif";
+const FONT_PATH = "assets/fonts/LiberationSerif-Bold.ttf";
+files.fetch(FONT_PATH).then(() => {
+  const face = new FontFace("Pair Serif", FONT_PATH, { weight: "700" });
+  fonts.add(face);
+  return face.load();
+}).then(() => {
+  digitFont = "'Pair Serif', serif";
+  if (look) { rebuildDigitTextures(); for (const v of tokens.values()) v.mat.map = digitTextures[v.digit] ?? null; }
+}, (e: unknown) => console.warn(`font: ${e instanceof Error ? e.message : String(e)}`));
 type Ctx = OffscreenCanvasRenderingContext2D;
 function roundRect(g: Ctx, x: number, y: number, w: number, h: number, r: number): void {
   g.beginPath();
@@ -117,7 +130,7 @@ function makeDigitTexture(digit: number, size: number): Texture {
   g.strokeStyle = "rgba(255,255,255,0.45)";
   roundRect(g, 34, 34, S - 68, S - 68, 22);
   g.stroke();
-  g.font = `700 ${S * 0.54}px Georgia, 'Times New Roman', serif`;
+  g.font = `700 ${S * 0.54}px ${digitFont}`; // render.js: Georgia, 'Times New Roman', serif
   g.textAlign = "center";
   g.textBaseline = "middle";
   g.fillStyle = "rgba(255,255,255,0.55)";

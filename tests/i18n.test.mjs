@@ -1,9 +1,10 @@
 // Every player-facing string exists in all nine locales (node --test).
-// Keys are the US-English source strings (see tests/i18n-keys.mjs).
+// Keys are the US-English source strings of the engine client (native/*.ts),
+// the shared modules and the content (see tests/i18n-keys.mjs).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DICTS, LOCALES, T, setLocale } from '../js/i18n.js';
-import { gfxStrings } from '../js/gfxui.js';
+import { SH_STRINGS, shStrings } from '../js/sh-strings.js';
 import { ALL } from './i18n-keys.mjs';
 
 const placeholders = (s) => [...String(s).matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join(',');
@@ -30,11 +31,14 @@ test('no locale carries keys that no longer exist', () => {
   }
 });
 
-test('Graphics and StarHermit strings follow the game language', () => {
-  for (const locale of LOCALES) assert.ok(gfxStrings(locale).sh.signIn, locale);
-  setLocale('de-DE');
-  assert.equal(gfxStrings().section, 'Grafik');
-  setLocale('en-US');
+test('StarHermit account strings exist in every locale with the rank placeholder', () => {
+  for (const locale of LOCALES) {
+    const sh = SH_STRINGS[locale];
+    assert.ok(sh, locale);
+    for (const k of ['signIn', 'invite', 'copied', 'copyFailed', 'signedOut', 'lbPosting', 'lbRank', 'lbPosted', 'lbNotPosted']) assert.ok(sh[k], `${locale} ${k}`);
+    assert.match(sh.lbRank, /\{rank\}/, locale);
+  }
+  assert.equal(shStrings('xx-YY').signIn, SH_STRINGS['en-US'].signIn);
 });
 
 test('T falls back to the key and fills placeholders; regional variants inherit', () => {

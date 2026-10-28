@@ -1,0 +1,126 @@
+# The menus and the keyboard on a desktop (1280 x 800): Settings (a toggle, the theme), Scores (a tab),
+# Achievements, the Daily and Challenge setups, then a Practice round played by keys: the board cursor
+# (arrows), select / connect (Enter), hint (H), undo (U), add rows (A), pause (Esc), Help from the pause
+# card and back to it, Leave round, Continue round from the title, Restart round, the profile name.
+# viewport 1280x800@1
+until 600 Daily challenge
+frames 10
+click =⚙️ Settings
+until 120 Captions for sounds
+frames 10
+click =Captions for sounds
+frames 5
+click =Field Notebook
+frames 10
+click =Dusk Study
+frames 20
+save settings
+click =← Back
+until 120 Daily challenge
+frames 10
+save title-dusk
+click =⚙️ Settings
+until 120 Captions for sounds
+frames 10
+click =Dusk Study
+frames 10
+click =Field Notebook
+frames 10
+key Escape 1
+until 120 Daily challenge
+frames 10
+click =🏆 Scores
+until 120 No entries yet
+frames 10
+click =Journey
+frames 10
+save scores
+click =← Back
+until 120 Daily challenge
+frames 10
+click =🎖️ Achievements
+until 120 Lane Reader
+frames 10
+save achievements
+click =← Back
+until 120 Daily challenge
+frames 10
+click =📅 Daily challenge
+until 120 Same seed for every player today
+frames 10
+save daily-setup
+click =← Back
+until 120 Choose a mode
+frames 10
+click =Challenge
+until 120 Ten-Move Tango
+frames 10
+save challenges
+click =← Back
+until 120 Choose a mode
+frames 10
+click =Practice
+until 120 Unranked. Restart
+frames 10
+click =Calm
+until 120 3 rows
+frames 10
+click =Start
+until 300 digits left
+frames 170
+key ArrowDown 1
+frames 5
+key Enter 1
+frames 10
+key ArrowRight 1
+frames 5
+save cursor
+key Enter 1
+frames 30
+key KeyH 1
+frames 30
+save hint
+key KeyU 1
+frames 10
+key KeyA 1
+frames 60
+save add-rows
+key Escape 1
+until 120 Resume
+frames 10
+save pause
+click =Help #2
+until 120 Paths must be clear
+frames 10
+save help
+click =← Back
+until 120 Resume
+frames 10
+click =Resume
+frames 10
+key Escape 1
+until 120 Leave round
+frames 10
+click =Leave round
+until 120 Continue round
+frames 10
+click =Continue round
+until 120 Resume
+frames 10
+click =Restart round
+until 300 digits left
+frames 170
+click =Profile
+until 120 Display name
+frames 10
+click Display name
+frames 5
+type Ada{Enter}
+frames 10
+expect Name saved locally.
+save profile
+click =← Back
+until 120 Resume
+frames 10
+click =Leave round
+until 120 Continue round

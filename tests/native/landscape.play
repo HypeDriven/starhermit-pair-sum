@@ -1,0 +1,40 @@
+# Phone landscape (844 x 390, DPR 3): the title, a Practice round with the tray as a column at the right,
+# a hint and a pair by touch, the lesson banner as a side panel, the pause card from the tray and Leave.
+# viewport 844x390@3
+until 600 Daily challenge
+frames 10
+save title-landscape
+touch =Play
+until 120 Choose a mode
+frames 10
+touch =Practice
+until 120 Unranked. Restart
+frames 10
+touch =Start
+until 300 digits left
+frames 170
+save round-landscape
+touch =Hint
+frames 30
+touch =Pause
+until 120 Resume
+frames 10
+save pause-landscape
+touch =Leave round
+until 120 Daily challenge
+frames 10
+touch =Play
+until 120 Choose a mode
+frames 10
+touch =Learn
+until 120 Pick a lesson
+frames 10
+touch =4. Across the fold
+until 300 digits left
+frames 40
+save lesson-landscape
+touch =Row 1, column 3, digit 7
+frames 8
+touch =Row 2, column 1, digit 3
+frames 40
+expect Now 6 and 4 make ten along the row.
