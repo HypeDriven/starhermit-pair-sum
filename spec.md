@@ -1,6 +1,6 @@
 # Pair Sum — Product and Game Specification
 
-**Document status:** running specification of the shipped game (StarHermit engine 1.23.0 script game).  
+**Document status:** running specification of the shipped game (StarHermit engine 1.24.0 script game).  
 **Game index:** 17  
 **Genre:** Number logic puzzle  
 **Players:** 1 player; optional asynchronous score comparison  
@@ -201,7 +201,7 @@ No module mutates rules state except through a validated command; the board rend
 ## 6. StarHermit integration
 
 ### Packaging and launch
-- `starhermit.txt`: name, description, owner, `server=score-script.js`, cover, `launch=index.html`, `engine.api=1`, `engine.entry=native/main.ts`, `engine.version=1.23.0`, `engine.minor=20`, `engine.capabilities=platform,storage,clipboard`, `control.*` for left, right, up, down, choose, cancel, hint, undo, addrows and camera with `engine.gamepad.*` defaults. (The old `addRows` action is now `addrows`: a rebinding made in the browser build is not carried over.)
+- `starhermit.txt`: name, description, owner, `server=score-script.js`, cover, `launch=index.html`, `engine.api=1`, `engine.entry=native/main.ts`, `engine.version=1.24.0`, `engine.minor=20`, `engine.capabilities=platform,storage,clipboard`, `control.*` for left, right, up, down, choose, cancel, hint, undo, addrows and camera with `engine.gamepad.*` defaults. (The old `addRows` action is now `addrows`: a rebinding made in the browser build is not carried over.)
 - `npm run package` writes the loader and the file index; `.starhermitignore` leaves tests/, tools/ and the docs out of the package.
 
 ### Identity, preferences, and progress
