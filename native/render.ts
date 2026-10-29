@@ -38,9 +38,8 @@ export const FRAMING = {
   marginX: 0.8, marginY: 1.0, shakeAmplitude: 0.05,
 };
 /** render.js LIGHT: authored low and lifted by exposure so the lit page stays below the bloom threshold. */
-// r160 lit physically (BRDF ÷ π); the engine's punctual lights take three's legacy units, so the key and the
-// hemisphere are the r160 intensities ÷ π (the room environment's reflections are unchanged).
-const LIGHT = { exposure: 2.3, key: 0.77 / Math.PI, hemi: 0.23 / Math.PI, env: 0.14 };
+// From engine.minor 23 punctual lights follow three r155+, so the r160 intensities are used as the page set them.
+const LIGHT = { exposure: 2.3, key: 0.77, hemi: 0.23, env: 0.14 };
 const UNLIT = 1 / LIGHT.exposure;
 
 // ---------------------------------------------------------------- the fixed parts
@@ -49,7 +48,7 @@ const raycaster = new Raycaster();
 const keyLight = new DirectionalLight(0xfff4e6, LIGHT.key);
 keyLight.position.set(4, 10, 5);
 keyLight.shadow.bias = -0.0004;
-keyLight.shadow.normalBias = 1; // three's 0.02 world units; the engine's normal bias is in texels
+keyLight.shadow.normalBias = 0.02;
 keyLight.shadow.radius = 3;
 const fill = new HemisphereLight(0xfff6e0, 0x8a87a0, LIGHT.hemi);
 scene.add(keyLight, keyLight.target, fill);
@@ -739,8 +738,13 @@ function fitCamera(): void {
   camera.bottom = -vh + cy;
   baseCamera();
   camera.updateProjectionMatrix();
-  // The shadow camera follows the view; its reach covers the board and the lift headroom.
-  keyLight.shadow.distance = FRAMING.cameraDistance + Math.max(halfW, halfH) + 6;
+  // Shadow frustum fitted tightly around the board (plus lift headroom), as render.js did.
+  const sc = keyLight.shadow.camera as OrthographicCamera;
+  const ext = Math.max(halfW, halfH) + 0.6;
+  if (sc.right !== ext) {
+    Object.assign(sc, { left: -ext, right: ext, top: ext, bottom: -ext, near: 1, far: 30 });
+    sc.updateProjectionMatrix();
+  }
 }
 function baseCamera(): void {
   const tilt = FRAMING.cameraTilt, d = FRAMING.cameraDistance;
