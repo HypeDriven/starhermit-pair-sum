@@ -827,7 +827,8 @@ export function applyLook(next: Look): void {
   keyLight.castShadow = next.shadows > 0;
   if (next.shadows > 0) keyLight.shadow.mapSize = next.shadows;
   // UnrealBloomPass(0.5, 0.4, 0.9) on r160's linear composer target (before the tone mapping, as here).
-  renderer.bloom = next.bloom ? { strength: 0.5, radius: 0.4, threshold: 0.9, resolution: next.budget.bloomRes } : null;
+  // The page's three r160 UnrealBloomPass strength 0.5 squared: minor 29 bloom follows r185 (≈2.9× the light).
+  renderer.bloom = next.bloom ? { strength: 0.25, radius: 0.4, threshold: 0.9, resolution: next.budget.bloomRes } : null;
   // GTAOPass: radius 0.45, distance exponent 1.6, thickness 1.2; 16 / 8 samples and the denoise per tier.
   renderer.ao = next.ao === "off" ? null : {
     blendIntensity: next.ao === "high" ? 0.85 : 0.7, radius: 0.45, distanceExponent: 1.6, thickness: 1.2, scale: 1,
