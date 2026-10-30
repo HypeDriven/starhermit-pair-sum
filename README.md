@@ -2,14 +2,14 @@
 
 Connect equal numbers — or pairs that sum to ten — along a clear row,
 column, or reading-order fold. A notebook-world number logic puzzle on the
-StarHermit engine (script game, engine 1.29.0, `engine.minor=31`): played
+StarHermit engine (script game, engine 1.30.0, `engine.minor=32`): played
 natively by the StarHermit client and in browsers by the engine's web
 runtime through the loader `index.html`.
 
 ## Run and check
 
 ```sh
-STARHERMIT=~/sh/runtime/1.29.0/starhermit-1.29.0-linux-x86_64/starhermit
+STARHERMIT=~/sh/runtime/1.30.0/starhermit-1.30.0-linux-x86_64/starhermit
 $STARHERMIT .            # play natively (as a guest)
 npm test                 # unit tests + native checks (tsc, starhermit check, play scripts)
 npm run test:browser     # the packaged game in Chrome: desktop, phone, landscape
