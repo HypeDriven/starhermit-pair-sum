@@ -11,8 +11,7 @@
 // runtime's Options own the volumes, the mute and the voice limit. The
 // oscillator blips the browser build synthesized while a sample decoded are
 // not ported (a live synthesis graph makes clip loads fail on the web
-// runtime): a clip still loading is silent. Clips load once the mixer runs
-// (natively at once, in a browser after the first press), one at a time.
+// runtime): a clip still loading is silent. Every clip loads at start.
 import { context, createClip, loadClip, play as playClip, type AudioClip, type Sound } from "starhermit:audio";
 import { createStream } from "../js/rules.js";
 
@@ -24,20 +23,21 @@ const SFX: Record<string, string> = {
 };
 export type Sfx = keyof typeof SFX;
 const clips = new Map<string, AudioClip>();
-const queue: string[] = [];
-let loading = false;
-let wantClips = false;
 let suspended = false;
 
-/** Asks for the clips; they load once the mixer runs (see update). */
-export function loadSfx(): void { wantClips = true; }
+/** Loads every clip at once (onStart); a sound whose clip is still loading is skipped. */
+export function loadSfx(): void {
+  for (const name of new Set(Object.values(SFX))) {
+    loadClip(`sfx/${name}.opus`).then((c) => { clips.set(name, c); }, (e: unknown) => { console.warn(`sfx ${name}: ${String(e)}`); });
+  }
+}
 
 export function play(event: Sfx): void {
   const file = SFX[event];
   if (!file || suspended) return;
   const clip = clips.get(file);
   if (!clip) return;
-  try { playClip(clip, { bus: "effects" }); } catch { clips.delete(file); if (!queue.includes(file)) queue.push(file); }
+  try { playClip(clip, { bus: "effects" }); } catch { /* the mixer is full this frame: skip it */ }
 }
 
 // -- the ambience and the music ------------------------------------------------------------------
@@ -127,19 +127,6 @@ export function update(dt: number): void {
     try { bVoice.fade(MUSIC_GAIN * intensity, 0.3); } catch { /* gone */ }
   }
   if (context.state !== "running") return;
-  if (wantClips) {
-    wantClips = false;
-    for (const n of Object.values(SFX)) if (!queue.includes(n)) queue.push(n);
-  }
-  if (!loading && queue.length) {
-    const name = queue.shift()!;
-    if (!clips.has(name)) {
-      loading = true;
-      loadClip(`sfx/${name}.opus`).then((c) => { clips.set(name, c); loading = false; }, (e: unknown) => { console.warn(`sfx ${name}: ${String(e)}`); loading = false; });
-    }
-    return;
-  }
-  if (loading) return;
   if (!ambClip) {
     if (!renderAmbience(8000)) return;
     try { ambClip = createClip([amb], RATE); } catch (e) { console.warn(`audio: ${String(e)}`); ambPos = 0; }

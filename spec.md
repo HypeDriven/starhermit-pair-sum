@@ -152,12 +152,14 @@ The subject is the active playfield at near-tabletop to room scale, framed so st
 
 The runtime's Options choose the graphics level (Auto from the device, Low, Balanced, High, Ultra and the levels within them), render scale, pixel-ratio cap, adaptive resolution and the frame-rate limit and readout; the game maps the level to the browser build's presets (`native/quality.ts`, from js/gfx.js TABLE and BUDGETS) and applies a change live.
 
+Shadows, AO, bloom, grade and AA come from the engine's `levelSettings()` for the frame's level (shown at each tier's first level).
+
 | Tier | Shadows | AO | Bloom | Grade | AA | Particles | Ambient | Detail |
 |---|---|---|---|---|---|---|---|---|
 | Low | off (blobs) | off | off | off | off | low | static | plain |
-| Balanced | 1024² | off | on | on | FXAA | high | animated | detailed |
-| High | 2048² | on | on | on | SMAA | high | animated | detailed |
-| Ultra | 4096² | high | on | on | MSAA | high | animated | detailed |
+| Balanced | 1024² | off | ½ res | on | FXAA | high | animated | detailed |
+| High | 2048² | ½ res, 8 samples | ½ res | on | SMAA | high | animated | detailed |
+| Ultra | 4096² | full res, 16 samples | full res | on | MSAA 4 | high | animated | detailed |
 
 | Budget | Low | Balanced | High | Ultra |
 |---|---|---|---|---|
@@ -168,9 +170,8 @@ The runtime's Options choose the graphics level (Auto from the device, Low, Bala
 | Paper-fibre bump | no | no | yes | yes |
 | Spark pool (Particles low: 20 %) | 600 | 1500 | 3000 | 4500 |
 | Dust motes (Particles low: half) | 24 | 40 | 80 | 120 |
-| Bloom / AO resolution | ½ | ½ | ½ | full |
 
-Spark and mote budgets grow with the level index within a tier (≤ 2×, at most 9000 / 240). Board, tokens, tap areas and rules are identical on every tier.
+Spark and mote budgets grow with the level's particle budget within a tier (≤ 2×, at most 9000 / 240). Board, tokens, tap areas and rules are identical on every tier.
 
 **Audio.** The authored one-shots (`sfx/*.opus`, `sfx/manifest.json`) play on the runtime's effects bus for select, deselect, clear, chain clear, row collapse, rows added, invalid pair, round win, round lose, hint, undo and UI. The quiet desk ambience (noise lowpassed at 320 Hz) and the generative pentatonic music (a note every 1.2 s, a low triangle every 4.8 s; a second, denser line fades in with chains) are rendered once into looping clips on the music bus. A hidden window and the pause card silence them.
 
@@ -195,7 +196,7 @@ No module mutates rules state except through a validated command; the board rend
 
 ### Loading and resilience
 
-- The engine's loader (`index.html`, written by `npm run package`) starts the package by its file index (`starhermit-files.json`); the sound clips load one at a time once the mixer runs (in browsers after the first press), so a clip still loading is silent, never an error.
+- The engine's loader (`index.html`, written by `npm run package`) starts the package by its file index (`starhermit-files.json`); all sound clips load at start, so a clip still loading is silent, never an error.
 - Leaving or pausing a round keeps a durable snapshot in the save; **Continue round** restores it paused with a "while you were away" note.
 
 ## 6. StarHermit integration
