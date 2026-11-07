@@ -25,7 +25,7 @@ npm run plays            # regenerates the generated play scripts from the rules
 - `js/content.js` — themes, seeded generator, 40-stage journey, lessons, daily, challenges, validators
 - `js/session.js` — state machine, commands, undo, replay envelope, snapshots
 - `js/progress.js` — the save document, merges, results, achievements, options
-- `js/i18n.js`, `js/locales/`, `js/sh-strings.js` — the nine locales
+- `assets/strings.json` — the nine locales
 - `score-script.js` — the platform script that posts ranked totals to the `high-score` board
 - `tests/` — node unit tests, `native.mjs` and `native/*.play`; `tools/` — packaging, CSS, play-script generator, browser check
 

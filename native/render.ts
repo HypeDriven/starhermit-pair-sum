@@ -23,7 +23,7 @@
 import {
   ACESFilmicToneMapping, BufferAttribute, BufferGeometry, CanvasTexture, CircleGeometry, Color, DirectionalLight, DoubleSide,
   ExtrudeGeometry, Group, HemisphereLight, InstancedMesh, Line, LineBasicMaterial, Matrix4, Mesh, MeshBasicMaterial,
-  MeshLambertMaterial, MeshPhysicalMaterial, MeshStandardMaterial, OrthographicCamera, PlaneGeometry, PMREMGenerator, Points,
+  MeshLambertMaterial, MeshPhysicalMaterial, MeshStandardMaterial, OrthographicCamera, ParticleEmitter, PlaneGeometry, PMREMGenerator, Points,
   PointsMaterial, Raycaster, RepeatWrapping, RingGeometry, RoomEnvironment, SRGBColorSpace, Shape, Vector3, pointerToNdc,
   renderer, scene, type Texture,
 } from "starhermit:scene";
@@ -382,66 +382,34 @@ function applyMarkerColors(): void {
   (ring.material as MeshBasicMaterial).color.set(selectColor()).multiplyScalar(UNLIT * (bloom ? 1.6 : 1));
   (pathLine.material as LineBasicMaterial).color.set(legalColor()).multiplyScalar(UNLIT);
   (pathDots.material as MeshBasicMaterial).color.set(legalColor()).multiplyScalar(UNLIT);
-  if (points) points.material.color.set(theme.accent).multiplyScalar(bloom ? 3 : UNLIT);
+  if (sparkMat) sparkMat.color.set(theme.accent).multiplyScalar(bloom ? 3 : UNLIT);
 }
 
 // ---------------------------------------------------------------- particles and motes
-let points: Points | null = null;
-let particleCap = 0, particleAlive = 0;
-let particleData = new Float32Array(0);
+let sparks: ParticleEmitter | null = null;
+let sparkMat: PointsMaterial | null = null;
+let sparkKey = "";
 function buildParticles(): void {
-  const cap = sparkCap(look!);
-  if (points && cap === particleCap) return;
-  if (points) { points.geometry.dispose(); points.material.dispose(); scene.remove(points); }
-  particleCap = cap;
-  particleData = new Float32Array(cap * 8); // x, y, z, vx, vy, vz, life, size
-  particleAlive = 0;
-  const geo = new BufferGeometry();
-  geo.setAttribute("position", new BufferAttribute(new Float32Array(cap * 3), 3));
-  geo.setDrawRange(0, 0);
-  points = new Points(geo, new PointsMaterial({
-    color: new Color(theme.accent), size: look!.particles === "high" ? 11 : 8, map: spriteTex, transparent: true, opacity: 0.95,
+  const cap = sparkCap(look!), size = look!.particles === "high" ? 11 : 8, key = `${cap}/${size}`;
+  if (sparks && key === sparkKey) return;
+  if (sparks) { scene.remove(sparks); sparks.dispose(); sparkMat!.dispose(); }
+  sparkKey = key;
+  sparkMat = new PointsMaterial({
+    color: new Color(theme.accent), size, map: spriteTex, transparent: true, opacity: 0.95,
     sizeAttenuation: true, depthWrite: false,
-  }));
-  points.frustumCulled = false;
-  scene.add(points);
+  });
+  // A fountain: the old spark left at 1 to 3 sideways and 1.5 to 3.5 up, so 16 to 63 degrees off vertical at 1.8 to 4.6.
+  sparks = new ParticleEmitter({
+    capacity: cap, material: sparkMat, seed: 0x5a11, space: "world", life: [0.6, 1],
+    direction: [0, 1, 0], spread: 1.1, speed: [1.8, 4.6], gravity: [0, -6, 0],
+  });
+  sparks.frustumCulled = false;
+  scene.add(sparks);
   applyMarkerColors();
 }
 function spawnBurst(x: number, y: number, z: number, n: number): void {
-  if (reducedMotion || !points) return;
-  if (look!.particles === "high") n = Math.round(n * 1.6);
-  const d = particleData;
-  for (let k = 0; k < n && particleAlive < particleCap; k++) {
-    const i = particleAlive++;
-    const a = Math.random() * Math.PI * 2;
-    const sp = 1 + Math.random() * 2;
-    d[i * 8] = x; d[i * 8 + 1] = y + 0.15; d[i * 8 + 2] = z;
-    d[i * 8 + 3] = Math.cos(a) * sp; d[i * 8 + 4] = 1.5 + Math.random() * 2; d[i * 8 + 5] = Math.sin(a) * sp;
-    d[i * 8 + 6] = 0.6 + Math.random() * 0.4; d[i * 8 + 7] = 1;
-  }
-}
-function updateParticles(dt: number): void {
-  if (!points || !particleAlive) return;
-  const d = particleData;
-  const pos = points.geometry.getAttribute("position")!;
-  let alive = particleAlive;
-  for (let i = 0; i < alive; i++) {
-    d[i * 8 + 6]! -= dt;
-    if (d[i * 8 + 6]! <= 0) {
-      alive--;
-      for (let k = 0; k < 8; k++) d[i * 8 + k] = d[alive * 8 + k]!;
-      i--;
-      continue;
-    }
-    d[i * 8 + 4]! -= 6 * dt;
-    d[i * 8]! += d[i * 8 + 3]! * dt;
-    d[i * 8 + 1]! += d[i * 8 + 4]! * dt;
-    d[i * 8 + 2]! += d[i * 8 + 5]! * dt;
-    pos.setXYZ(i, d[i * 8]!, d[i * 8 + 1]!, d[i * 8 + 2]!);
-  }
-  particleAlive = alive;
-  points.geometry.setDrawRange(0, alive);
-  pos.needsUpdate = true;
+  if (reducedMotion || !sparks) return;
+  sparks.burst(look!.particles === "high" ? Math.round(n * 1.6) : n, [x, y + 0.15, z]);
 }
 const moteSeed = new Float32Array(MOTE_MAX * 4);
 {
@@ -857,7 +825,7 @@ export function setTheme(id: string): void {
   rebuildDigitTextures();
   for (const view of tokens.values()) { view.mat.map = digitTextures[view.digit] ?? null; }
   buildEnvironment();
-  if (points) points.material.color.set(theme.accent);
+  if (sparkMat) sparkMat.color.set(theme.accent);
   applyMarkerColors();
   updateHighlights();
 }
@@ -884,7 +852,6 @@ export function update(dt: number, w: number, h: number, rect: Rect): void {
   dt = Math.min(0.05, dt);
   animTime += dt;
   updateTokens(dt);
-  updateParticles(dt);
   updateShake(dt);
   updateAmbient();
 }

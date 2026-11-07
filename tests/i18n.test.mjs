@@ -3,10 +3,11 @@
 // the shared modules and the content (see tests/i18n-keys.mjs).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DICTS, LOCALES, T, setLocale } from '../js/i18n.js';
-import { SH_STRINGS, shStrings } from '../js/sh-strings.js';
+import { readFileSync } from 'node:fs';
 import { ALL } from './i18n-keys.mjs';
 
+const DICTS = JSON.parse(readFileSync(new URL('../assets/strings.json', import.meta.url), 'utf8'));
+const LOCALES = Object.keys(DICTS);
 const placeholders = (s) => [...String(s).matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join(',');
 const tags = (s) => (String(s).match(/<[^>]+>/g) || []).join('');
 
@@ -31,28 +32,12 @@ test('no locale carries keys that no longer exist', () => {
   }
 });
 
-test('StarHermit account strings exist in every locale with the rank placeholder', () => {
-  for (const locale of LOCALES) {
-    const sh = SH_STRINGS[locale];
-    assert.ok(sh, locale);
-    for (const k of ['signIn', 'invite', 'copied', 'copyFailed', 'signedOut', 'lbPosting', 'lbRank', 'lbPosted', 'lbNotPosted']) assert.ok(sh[k], `${locale} ${k}`);
-    assert.match(sh.lbRank, /\{rank\}/, locale);
-  }
-  assert.equal(shStrings('xx-YY').signIn, SH_STRINGS['en-US'].signIn);
-});
-
-test('T falls back to the key and fills placeholders; regional variants inherit', () => {
-  setLocale('de-DE');
-  assert.equal(T('Not a real key {x}', { x: 1 }), 'Not a real key 1');
-  assert.equal(T('{n} moves', { n: 3 }), '3 Züge');
-  setLocale('fr-CA');
-  assert.equal(T('Score'), 'Pointage');
-  assert.equal(T('Hint'), 'Indice');
-  setLocale('es-ES');
-  assert.equal(T('Settings'), 'Ajustes');
-  assert.equal(T('Hint'), 'Pista');
-  setLocale('en-GB');
-  assert.equal(T('Color palette'), 'Colour palette');
-  setLocale('en-US');
-  assert.equal(T('Hint'), 'Hint');
+test('regional variants inherit', () => {
+  assert.equal(DICTS['de-DE']['{n} moves'], '{n} Züge');
+  assert.equal(DICTS['fr-CA'].Score, 'Pointage');
+  assert.equal(DICTS['fr-CA'].Hint, 'Indice');
+  assert.equal(DICTS['es-ES'].Settings, 'Ajustes');
+  assert.equal(DICTS['es-ES'].Hint, 'Pista');
+  assert.equal(DICTS['en-GB']['Color palette'], 'Colour palette');
+  assert.equal(DICTS['en-US'].Hint, 'Hint');
 });

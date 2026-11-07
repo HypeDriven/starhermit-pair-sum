@@ -84,7 +84,6 @@ export const app = {
   lesson: null as string | null,
   alert: null as { text: string; until: number } | null,
   caption: null as { text: string; until: number } | null,
-  toasts: [] as { text: string; until: number }[],
   hint: null as { a: number; b: number; until: number } | null,
   resultsAt: null as number | null,
 };
@@ -96,8 +95,8 @@ export function announce(text: string, assertive = false): void {
   if (text) ui.announce(text.slice(0, 500), { politeness: assertive ? "assertive" : "polite" });
 }
 export function toast(text: string): void {
-  app.toasts.push({ text, until: now() + 3.6 });
-  if (app.toasts.length > 4) app.toasts.shift();
+  // The old stack's spot (bottom right, 90 px up: the stack's own margin is 16); the game announces its own.
+  ui.toast!(text, { duration: 3.6, style: ["toast", "toast-text"], dismissible: false, announce: false, position: "bottom", anchor: "right", offset: 74 });
 }
 function showAlert(text: string): void { app.alert = { text, until: now() + 2.2 }; }
 function haptic(ms: number): void { if (platform.options.haptics) { try { vibrate(ms); } catch { /* no motor */ } } }
@@ -667,7 +666,6 @@ onUpdate((dt) => {
   if (app.alert && app.alert.until < t) app.alert = null;
   if (app.caption && app.caption.until < t) app.caption = null;
   if (app.hint && app.hint.until < t) app.hint = null;
-  app.toasts = app.toasts.filter((x) => x.until >= t);
 });
 const pending: (() => void)[] = [];
 /** A widget's press, run once the frame's UI is built (state changes mid-build would break later widgets). */

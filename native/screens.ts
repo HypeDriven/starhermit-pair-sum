@@ -33,10 +33,8 @@ import { mix, token } from "./style.ts";
 // ------------------------------------------------------------------ layout
 interface Layout { lw: number; lh: number; sc: number; wide: boolean; phone: boolean; short: boolean }
 function layoutNow(): Layout {
-  const f = frame();
-  const sc = ui.preferences().scale;
-  const sa = f.safeArea;
-  const lw = Math.max(1, (f.width - sa.left - sa.right) / sc), lh = Math.max(1, (f.height - sa.top - sa.bottom) / sc);
+  const v = ui.viewport!();
+  const lw = Math.max(1, v.width), lh = Math.max(1, v.height), sc = v.scale;
   return { lw, lh, sc, wide: lw >= 1024, phone: lw <= 700 && lh > lw, short: lh <= 500 && lw > lh };
 }
 const lastSize = new Map<string, ui.Rect>();
@@ -94,7 +92,6 @@ export function drawScreens(): void {
     playScreen(L);
     if (session.machine === "paused") pauseCard(L);
   }
-  toasts(L);
   if (app.focusNext) {
     const age = f.frame - app.openedFrame;
     if (age >= 1) ui.setFocus(app.focusNext);
@@ -320,17 +317,6 @@ function boardTargets(L: Layout): void {
       });
     }
   }
-}
-
-// ------------------------------------------------------------------ toasts
-function toasts(L: Layout): void {
-  if (!app.toasts.length) return;
-  const w = Math.min(L.lw - 24, 360);
-  ui.place("toast-stack", { anchor: "bottom-end", x: 12, y: 90 }, () => {
-    ui.column("toast-col", () => {
-      app.toasts.forEach((t, i) => ui.column(`toast-${i}`, () => para(t.text, w - 36, "toast-text", `toast-${i}-text`), { style: "toast" }));
-    }, { spacing: 8, align: "end" });
-  });
 }
 
 // ------------------------------------------------------------------ the pause card (index.html #pause-overlay)

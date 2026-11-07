@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { LESSONS, JOURNEY, PRACTICE_DIFFICULTIES, CHALLENGES, THEMES, ACHIEVEMENTS } from '../js/content.js';
 
 const ROOT = new URL('..', import.meta.url).pathname;
-const SKIP = new Set(['i18n.js', 'sh-strings.js', 'i18n.ts']);
+const SKIP = new Set(['i18n.ts']);
 const unescape = (s) => s.replace(/\\(['"`\\])/g, '$1');
 
 export function sourceKeys() {
