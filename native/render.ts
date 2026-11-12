@@ -1,3 +1,5 @@
+// localization-runtime:attached
+import { localizedCanvasFont as __l10nCanvasFont } from "./l10n/font.ts";
 // The notebook world on starhermit:scene, as the browser build's js/render.js
 // drew it with three.js r160: the orthographic near-tabletop camera, the ruled
 // paper page (fibre bump on High/Ultra), the dashed pencil slot outlines, the
@@ -129,7 +131,7 @@ function makeDigitTexture(digit: number, size: number): Texture {
   g.strokeStyle = "rgba(255,255,255,0.45)";
   roundRect(g, 34, 34, S - 68, S - 68, 22);
   g.stroke();
-  g.font = `700 ${S * 0.54}px ${digitFont}`; // render.js: Georgia, 'Times New Roman', serif
+  g.font = __l10nCanvasFont(`700 ${S * 0.54}px ${digitFont}`); // render.js: Georgia, 'Times New Roman', serif
   g.textAlign = "center";
   g.textBaseline = "middle";
   g.fillStyle = "rgba(255,255,255,0.55)";

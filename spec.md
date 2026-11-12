@@ -269,3 +269,11 @@ The game is done when `npm test` and `npm run test:browser` pass after `npm run 
 - The old DOM board mirror became the tokens' named targets: arrow keys now show a focus ring on the 3D token instead of switching to the flat notebook view; Tab moves among widgets (the old Tab-cycles-cells shortcut is not kept).
 - Fixed while porting: the board sat off-centre in the free stage area (a sign slip in the old frustum offset), Practice round titles lost their difficulty name, and "New personal best" could never show (every round shared one session id); the colour-palette setting now recolours the markers, and haptics vibrate.
 - Guests' old browser progress (localStorage) is not migrated; signed-in players' cloud progress is.
+
+<!-- regional-localization:start -->
+
+### Regional interface languages
+
+The string tables include complete regional variants for `fr-BE`, `de-BE`, `en-SG`, `en-HK`, `en-BQ`, `es-CO`, `de-IT`, `fr-IT`, `es-CL`, `es-AR`, `es-EC`, `de-BR`. These reuse the corresponding existing translations in their language family. The runtime can resolve the exact regional tag. Language selection is available from the game’s Options panel or F2 and is saved per player in `ui.language`. Changes apply during play. Additional national, regional and indigenous language packs are only shipped once every English message has a translation with intact placeholders and markup. Complete additional language tables: `ja-JP`, `nl-BE`, `zh-SG`, `ms-SG`, `ta-SG`, `zh-HK`, `yue-HK`, `nl-NL`, `fi-FI`, `sv-FI`, `et-EE`, `id-ID`, `vi-VN`, `ru-FI`, `ru-EE`, `su-ID`, `da-DE`, `lb-BE`, `co-FR`, `eu-FR`, `ca-FR`, `oc-FR`, `sl-IT`, `fur-IT`, `ca-IT`, `oc-IT`, `ca-ES`, `eu-ES`, `gl-ES`, `bew-ID`, `km-VN`.
+
+<!-- regional-localization:end -->

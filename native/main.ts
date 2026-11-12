@@ -1,3 +1,4 @@
+import { withLanguageRender as __l10nRender } from "./l10n/menu.ts";
 // Pair Sum on the StarHermit engine: the entry module (starhermit.txt
 // engine.entry), played natively by the StarHermit client and in browsers by
 // the engine's web runtime. The rules (js/rules.js), content (js/content.js)
@@ -670,12 +671,16 @@ onUpdate((dt) => {
 const pending: (() => void)[] = [];
 /** A widget's press, run once the frame's UI is built (state changes mid-build would break later widgets). */
 export function later(fn: () => void): void { pending.push(fn); }
-onRender(() => {
+onRender(__l10nRender(() => {
   hudRects.length = 0;
   drawScreens();
   for (const fn of pending.splice(0)) fn();
   pointerInput();
   const f = frame();
   render.update(frameDt, f.width, f.height, free);
-});
+}));
 export { defTitle };
+
+// localization-runtime:menu
+import { installLanguageMenu as __installLanguageMenu } from "./l10n/menu.ts";
+__installLanguageMenu(false);
