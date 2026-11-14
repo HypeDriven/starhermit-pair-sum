@@ -1,5 +1,7 @@
 # Pair Sum
 
+**[▶ Play Pair Sum on StarHermit](https://dashboard.starhermit.com/play/788c0ad2-5a63-4fca-bf21-97f7f98224df)**
+
 Connect equal numbers — or pairs that sum to ten — along a clear row,
 column, or reading-order fold. A notebook-world number logic puzzle on the
 StarHermit engine (script game, engine 1.39.0, `engine.minor=39`): played
