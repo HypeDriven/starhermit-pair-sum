@@ -105,7 +105,7 @@ function toWindow(x: number, y: number, w: number, h: number): ui.Rect {
 }
 
 // ------------------------------------------------------------------ the frame
-export function drawScreens(): void {
+function drawScreensImmediate(): void {
   const L = layoutNow();
   const f = frame();
   if (app.screen) {
@@ -904,4 +904,11 @@ function profileScreen(w: number, L: Layout): void {
   para(hostedPlayer
     ? T("Connected to the platform — progress syncs to your account cloud save with conflict-safe merge.")
     : T("Offline mode — cloud save and platform identity activate when launched by the host."), w, "note");
+}
+
+export function drawScreens(): void {
+  if (app.screen !== "help") { drawScreensImmediate(); return; }
+  const actions = ["left","right","up","down","choose","cancel","hint","undo","addrows","camera"];
+  const version = JSON.stringify([(app as any).settings ?? (app as any).options ?? {}, (platform as any).options ?? {}, actions.map((action) => bindings(action))]);
+  ui.retain!("help-screen", version, drawScreensImmediate);
 }

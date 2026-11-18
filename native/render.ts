@@ -1,5 +1,6 @@
 // localization-runtime:attached
-import { localizedCanvasFont as __l10nCanvasFont } from "./l10n/font.ts";
+import {
+  localizedCanvasFont as __l10nCanvasFont } from "./l10n/font.ts";
 // The notebook world on starhermit:scene, as the browser build's js/render.js
 // drew it with three.js r160: the orthographic near-tabletop camera, the ruled
 // paper page (fibre bump on High/Ultra), the dashed pencil slot outlines, the
@@ -17,18 +18,14 @@ import { localizedCanvasFont as __l10nCanvasFont } from "./l10n/font.ts";
 //
 // From three.js r160 (physically based lights): colours as written, the
 // punctual lights' intensities ÷ π (the engine takes three's legacy units). r160's composer drew the scene in linear half floats, bloomed it
-// (UnrealBloomPass 0.5 / 0.4 / threshold 0.9), tone-mapped it (ACES at 2.3),
-// then graded it in display space (GradeShader) and anti-aliased it; the
+// (UnrealBloomPass 0.5 / 0.4 / threshold 0.9), tone-mapped it (ACES at 2.3), // then graded it in display space (GradeShader) and anti-aliased it; the
 // runtime's renderer.ao / bloom / grade ("display") / antialias do the same in
 // that order. Adaptive resolution, the pixel-ratio cap and the frame-rate
 // readout are the runtime's. Rendering never touches the rules state.
 import {
-  ACESFilmicToneMapping, BufferAttribute, BufferGeometry, CanvasTexture, CircleGeometry, Color, DirectionalLight, DoubleSide,
-  ExtrudeGeometry, Group, HemisphereLight, InstancedMesh, Line, LineBasicMaterial, Matrix4, Mesh, MeshBasicMaterial,
-  MeshLambertMaterial, MeshPhysicalMaterial, MeshStandardMaterial, OrthographicCamera, ParticleEmitter, PlaneGeometry, PMREMGenerator, Points,
-  PointsMaterial, Raycaster, RepeatWrapping, RingGeometry, RoomEnvironment, SRGBColorSpace, Shape, Vector3, pointerToNdc,
-  renderer, scene, type Texture,
+  ACESFilmicToneMapping, BufferAttribute, BufferGeometry, CanvasTexture, CircleGeometry, Color, DirectionalLight, DoubleSide, ExtrudeGeometry, Group, HemisphereLight, InstancedMesh, Line, LineBasicMaterial, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, MeshPhysicalMaterial, MeshStandardMaterial, OrthographicCamera, PlaneGeometry, PMREMGenerator, Points, PointsMaterial, Raycaster, RepeatWrapping, RingGeometry, RoomEnvironment, SRGBColorSpace, Shape, Vector3, pointerToNdc, renderer, scene, type Texture,
 } from "starhermit:scene";
+import { GPUParticleEmitter } from "starhermit:particles";
 import { files } from "starhermit:engine";
 import { FontFace, OffscreenCanvas, fonts, type OffscreenCanvasRenderingContext2D } from "starhermit:canvas";
 import { Content, type Check, type GameEvent, type State, type Theme } from "./game.ts";
@@ -388,7 +385,7 @@ function applyMarkerColors(): void {
 }
 
 // ---------------------------------------------------------------- particles and motes
-let sparks: ParticleEmitter | null = null;
+let sparks: GPUParticleEmitter | null = null;
 let sparkMat: PointsMaterial | null = null;
 let sparkKey = "";
 function buildParticles(): void {
@@ -401,7 +398,7 @@ function buildParticles(): void {
     sizeAttenuation: true, depthWrite: false,
   });
   // A fountain: the old spark left at 1 to 3 sideways and 1.5 to 3.5 up, so 16 to 63 degrees off vertical at 1.8 to 4.6.
-  sparks = new ParticleEmitter({
+  sparks = new GPUParticleEmitter({
     capacity: cap, material: sparkMat, seed: 0x5a11, space: "world", life: [0.6, 1],
     direction: [0, 1, 0], spread: 1.1, speed: [1.8, 4.6], gravity: [0, -6, 0],
   });
