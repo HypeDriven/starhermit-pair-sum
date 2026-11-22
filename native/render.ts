@@ -810,6 +810,7 @@ export function applyLook(next: Look): void {
     vignette: { amount: 0.16, inner: 0.38, outer: 0.85, scale: [1, 0.9] },
   } : null;
   renderer.antialias = next.antialias;
+  renderer.motionBlur = next.bloom !== null ? { intensity: 0.25, samples: 8, maxPixels: 16, targetFps: 60, camera: false } : null;
   const k = `${next.detailed}|${next.budget.material}|${next.budget.digit}|${next.budget.paper}|${next.budget.curve}|${next.budget.bevel}|${next.budget.paperBump}`;
   if (k !== builtKey) { builtKey = k; rebuildAll(); }
   else { buildParticles(); applyMarkerColors(); for (const v of tokens.values()) v.mesh.castShadow = next.shadows > 0; }
