@@ -319,6 +319,7 @@ function buildEnvironment(): void {
   paper.rotation.x = -Math.PI / 2;
   paper.position.y = -FRAMING.tokenHeight / 2 - 0.01;
   paper.receiveShadow = true;
+  paper.movable = false;
   scene.add(paper);
   scene.background = new Color(theme.sky);
   fill.color.set(theme.paper);
@@ -338,6 +339,7 @@ function buildSlots(): void {
   }), 512);
   slots.count = 0;
   slots.receiveShadow = true;
+  slots.movable = false; // its instances change only with the layout (static instances stay static, host API 1.45)
   slots.visible = look!.detailed;
   slotKey = "";
   scene.add(slots);
