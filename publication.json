@@ -12,7 +12,7 @@
     "metadataSource": "starhermit.txt",
     "createdAt": "2026-09-01T07:01:05.229243+00:00",
     "coverArtSource": "manifest",
-    "coverArtUpdatedAt": "2026-11-26T14:51:55.409658+00:00",
+    "coverArtUpdatedAt": "2026-11-27T17:07:16.517233+00:00",
     "submittedByUserId": "2712e04e-461b-4d23-81ae-e40b429128a8",
     "submittedByUsername": "starhermit",
     "hosting": {
@@ -22,9 +22,9 @@
       "pinnedCommitSha": null,
       "deployedCommitSha": null,
       "deployError": null,
-      "deployedAt": "2026-11-26T14:51:53.953924+00:00",
+      "deployedAt": "2026-11-27T17:07:16.505532+00:00",
       "externalLaunchUrl": null,
-      "engineVersion": "1.50.0",
+      "engineVersion": "1.53.0",
       "deployWarning": null
     },
     "description": "Connect unobstructed pairs of equal numbers or numbers that add up to the target sum to clear the board.",
@@ -36,19 +36,19 @@
     "links": [],
     "isDisabled": false
   },
-  "publishedAt": "2026-11-26T14:51:54.618Z",
-  "sourceCommit": "9cc15809da60fa207063709ca297695d682b590d",
-  "bytesReceived": 2021559,
-  "archiveSha256": "31d91d6d37d3dabf9e4676adbc7ddca1c5014b9adf3ead0f396a2ba8fbe4f6df",
+  "publishedAt": "2026-11-27T17:07:16.752Z",
+  "sourceCommit": "2325cc727adddd77e050f1ae7c9ccc256324aab2",
+  "bytesReceived": 2021695,
+  "archiveSha256": "1245b088d2211b772b3d8f486c0916374cad58ad1c48a77a0beaf7be2f943a19",
   "indexSha256": "63b96aa42833f09bff24eb9b4d2babaf844eb16bfc8dca97da4d56f3df19b585",
   "result": {
     "clientPublished": true,
     "serverImageLoaded": false,
     "imageDigest": null,
-    "bytesReceived": 2021559,
+    "bytesReceived": 2021695,
     "mode": "replace",
     "filesRemoved": 0,
-    "engineVersion": "1.50.0",
+    "engineVersion": "1.53.0",
     "deployWarning": null
   },
   "liveVerification": {
