@@ -30,10 +30,6 @@ export function loadSfx(): void {
   for (const name of new Set(Object.values(SFX))) {
     loadClip(`sfx/${name}.opus`).then((c) => { clips.set(name, c); }, (e: unknown) => { console.warn(`sfx ${name}: ${String(e)}`); });
   }
-  const failed = (e: unknown): void => { console.warn(`audio: ${String(e)}`); };
-  renderAmbience().then((c) => { ambClip = c; }, failed);
-  renderLine(calm).then((c) => { aClip = c; }, failed);
-  renderLine(dense).then((c) => { bClip = c; }, failed);
 }
 
 export function play(event: Sfx): void {
@@ -113,7 +109,20 @@ export function setSuspended(on: boolean): void {
 
 let lastIntensity = -1;
 /** Each frame: once the mixer runs and the renders are in, the ambience and the music start. */
+let __bedsStarted = false;
+function startBeds(): void {
+  if (__bedsStarted) return;
+  __bedsStarted = true;
+  void (async () => {
+    const failed = (e: unknown): void => { console.warn(`audio: ${String(e)}`); };
+    renderAmbience().then((c) => { ambClip = c; }, failed);
+    renderLine(calm).then((c) => { aClip = c; }, failed);
+    renderLine(dense).then((c) => { bClip = c; }, failed);
+  })();
+}
+
 export function update(dt: number): void {
+  startBeds();
   // audio.js: the intensity eases off by 0.02 a step (300 ms).
   intensity = Math.max(0, intensity - (0.02 / STEP_S) * dt);
   if (bVoice && !suspended && Math.abs(intensity - lastIntensity) > 0.02) {
